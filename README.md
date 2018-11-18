@@ -32,6 +32,7 @@ how to build with CMake.
     ~~~bash
     cmake -G "Visual Studio <version> Win64" ..
     ~~~
+    This will generate MSVC solution
 
 * `OSX`: change `cmake ..` to:
     ~~~bash
