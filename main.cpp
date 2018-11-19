@@ -10,5 +10,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     auto parser = vrp::CsvParser(argv[1]);
+    auto input = parser.load_input();
     return 0;
 }

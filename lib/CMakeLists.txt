@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 2.8)
 project(vrp)
 
 # search file pattern
-file(GLOB SOURCES src/*.cpp)
+file(GLOB_RECURSE SOURCES src/*.cpp)
 
 # create library
 add_library(${PROJECT_NAME} STATIC ${SOURCES})
@@ -14,5 +14,8 @@ add_library(${PROJECT_NAME} STATIC ${SOURCES})
 # that is linked to this library
 target_include_directories(${PROJECT_NAME} PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
