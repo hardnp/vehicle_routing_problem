@@ -8,7 +8,8 @@ how to build with CMake.
 
 > By default, `cmake` generates Unix Makefiles, if your system supports it (e.g.
 > `Linux`), you can use it to build the code. Otherwise, see [specific cmake
-> command-line](#cross-platform-specifics) when building for `Windows`, `OSX`.
+> command-line](#cross-platform-specifics-cmake-generators) when building for
+> `Windows`, `OSX`.
 
 * Release
     ~~~bash
