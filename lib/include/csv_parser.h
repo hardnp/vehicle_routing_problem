@@ -1,6 +1,6 @@
 #pragma once
 
 namespace vrp {
-    class XmlParser {
+    class CsvParser {
     };
 }
