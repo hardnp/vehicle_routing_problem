@@ -27,6 +27,12 @@ how to build with CMake.
     cmake --build .
     ~~~
 
+* Built executable `vrp_solver` is located under `build/` directory
+    ~~~bash
+    [Linux] ./build/vrp_solver test_data/sample_input.csv
+    [Windows] build\\vrp_solver.exe test_data\\sample_input.csv
+    ~~~
+
 ### Cross Platform Specifics: cmake generators
 
 * `Windows`: change `cmake ..` to:
