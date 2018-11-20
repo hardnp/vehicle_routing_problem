@@ -1,25 +1,28 @@
-table, customer
-id, demand, hard_tw, soft_tw, service_time, suitable_vehicles
-1, 10, 0-200, 50-70, 10, 0;1;2
-2, 5, 10-50, 10-20, 5, 0;3
-3, 1, 100-110, 105-110, 1, 1
-4, 2, 0-20, 5-15, 3, 2;3
+table customer
+id; demand; hard_tw_begin; hard_tw_end; soft_tw_begin; soft_tw_end; service_time; suitable_vehicles
+1; 10; 0; 200; 50; 70; 10; 0; 1; 2
+2; 5; 10; 50; 10; 20; 5; 0; 3
+3; 1; 100; 110; 105; 110; 1; 1
+4; 2; 0; 20; 5; 15; 3; 2; 3
 
-table, vehicle
-id, capacity, fixed_cost, variable_cost
-1, 2, 1, 5
-2, 10, 50, 15
-3, 1, 5, 2
-4, 5, 5, 10
+table vehicle
+id; capacity; weight; fixed_cost; variable_cost
+1; 2; 2; 1; 5
+2; 10; 3; 50; 15
+3; 1; 7; 5; 2
+4; 5; 8; 5; 10
 
-table, cost
-0, 1, 2, 3
-1, 0, 4, 5
-2, 4, 0, 6
-3, 5, 6, 0
+table cost
+0; 1; 2; 3
+1; 0; 4; 5
+2; 4; 0; 6
+3; 5; 6; 0
 
-table, time
-0, 9, 8, 7
-9, 0, 6, 5
-8, 6, 0, 4
-7, 5, 4, 0
+table time
+0; 9; 8; 7
+9; 0; 6; 5
+8; 6; 0; 4
+7; 5; 4; 0
+
+value max_violated_soft_tw
+3

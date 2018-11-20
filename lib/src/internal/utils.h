@@ -8,7 +8,8 @@
 namespace vrp{
 namespace detail {
 /// Splits string by delimiter
-static std::vector<std::string> split(const std::string& src, char delimiter) {
+static std::vector<std::string> split(const std::string& src,
+    char delimiter) {
     std::vector<std::string> dst;
     std::istringstream ss_src(src);
     std::string tmp;
