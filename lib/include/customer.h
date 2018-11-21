@@ -8,7 +8,7 @@
 namespace vrp {
 class Customer {
 public:
-    uint64_t id = 0;  ///< customer id
+    uint64_t id = 0;  ///< customer id. 0 is reserved for depot
     uint64_t demand = 0;  ///< customer demand
     std::pair<uint64_t, uint64_t> hard_tw = {};  ///< hard time window
     std::pair<uint64_t, uint64_t> soft_tw = {};  ///< soft time window

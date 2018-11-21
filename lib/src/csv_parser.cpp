@@ -13,13 +13,17 @@ namespace {
 #define UNUSED(x) (void)x;
 
 /// Checks whether given string is a supported type specifier
-bool type_specifier(const std::string& line) {
+bool type_specifier(std::string& line) {
     static std::vector<std::string> supported_types = {"table", "value"};
-    bool is_type = false;
     for (const auto& type : supported_types) {
-        is_type |= std::equal(line.cbegin(), line.cend(), type.cbegin());
+        if (std::equal(
+                line.cbegin(), line.cbegin() + type.size(), type.cbegin())) {
+            // remove type specifier from string
+            line = {line.begin() + type.size() + 1, line.end()};
+            return true;
+        }
     }
-    return is_type;
+    return false;
 }
 
 /// Reads file content into memory
@@ -33,16 +37,12 @@ read_file(std::ifstream& stream) {
     while (!stream.eof()) {
         std::getline(stream, line);
         if (line.empty()) continue;
-        if (type_specifier(std::string(line.cbegin(), line.cbegin() + 5))) {
-        // if (std::equal(line.cbegin(), line.cbegin() + 5, "table")) {
-            line = std::string(line.cbegin() + 6, line.cend());
+        if (type_specifier(line)) {
             table_lines.push_back(std::make_pair(line, line_number));
         }
         content.push_back(std::move(line));
         line_number++;
     }
-    std::sort(table_lines.begin(), table_lines.end(),
-        [] (const auto& a, const auto& b) { return a.second < b.second; });
     table_lines.push_back(std::make_pair("_", content.size()));
     std::map<std::string, std::pair<uint64_t, uint64_t>> data_ranges = {};
     for (size_t i = 0; i < table_lines.size() - 1; ++i) {

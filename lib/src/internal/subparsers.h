@@ -11,8 +11,28 @@
 
 namespace vrp {
 namespace detail {
-class CustomerTableParser {
+/// Base class with common parsing checks
+class BaseParser {
+protected:
+    std::vector<std::vector<std::string>> m_raw_values = {};
     const char m_delimiter = ';';
+public:
+    BaseParser(std::string name,
+        const std::vector<std::string>& raw_data,
+        const std::pair<uint64_t, uint64_t>& section, uint64_t min_section_size,
+        size_t row_length, char delimiter = ';', uint64_t section_offset = 0);
+};
+
+/// Customers table parser
+/*!
+ *
+ * Format:
+ *  > "table customer" - table type
+ *  > header
+ *  > id, demand, hard_tw_begin, hard_tw_end, soft_tw_begin, soft_tw_end,
+ *    service_time, suitable_vehicles...
+ */
+class CustomerTableParser : public BaseParser {
     std::vector<Customer> customers = {};
 public:
     static constexpr char table_name[] = "customer";
@@ -21,13 +41,18 @@ public:
         const std::pair<uint64_t, uint64_t>& table_section, size_t row_length,
         char delimiter = ';');
 
-    ~CustomerTableParser() = default;
-
     std::vector<Customer> get() const;
 };
 
-class VehicleTableParser {
-    const char m_delimiter = ';';
+/// Vehicles table parser
+/*!
+ *
+ * Format:
+ *  > "table vehicle" - table type
+ *  > header
+ *  > id, capacity, fixed_cost, variable_cost
+ */
+class VehicleTableParser : public BaseParser {
     std::vector<Vehicle> vehicles = {};
 public:
     static constexpr char table_name[] = "vehicle";
@@ -36,13 +61,17 @@ public:
         const std::pair<uint64_t, uint64_t>& table_section, size_t row_length,
         char delimiter = ';');
 
-    ~VehicleTableParser() = default;
-
     std::vector<Vehicle> get() const;
 };
 
-class CostTableParser {
-    const char m_delimiter = ';';
+/// Costs table parser
+/*!
+ *
+ * Format:
+ *  > "table cost" - table type
+ *  > matrix NxN where N is the number of customers
+ */
+class CostTableParser : public BaseParser {
     std::vector<std::vector<double>> costs = {};
 public:
     static constexpr char table_name[] = "cost";
@@ -51,13 +80,17 @@ public:
         const std::pair<uint64_t, uint64_t>& table_section, size_t row_length,
         char delimiter = ';');
 
-    ~CostTableParser() = default;
-
     std::vector<std::vector<double>> get() const;
 };
 
-class TimeTableParser {
-    const char m_delimiter = ';';
+/// Time table parser
+/*!
+ *
+ * Format:
+ *  > "table time" - table type
+ *  > matrix NxN where N is the number of customers
+ */
+class TimeTableParser : public BaseParser {
     std::vector<std::vector<double>> times = {};
 public:
     static constexpr char table_name[] = "time";
@@ -66,20 +99,22 @@ public:
         const std::pair<uint64_t, uint64_t>& table_section, size_t row_length,
         char delimiter = ';');
 
-    ~TimeTableParser() = default;
-
     std::vector<std::vector<double>> get() const;
 };
 
-class UInt64ValueParser {
-    const char m_delimiter = ';';
+/// 64-bit unsigned integer parser
+/*!
+ *
+ * Format:
+ *  > "value <name>" - value name
+ *  > uint64_t value
+ */
+class UInt64ValueParser : public BaseParser {
     uint64_t value = std::numeric_limits<uint64_t>::max();
 public:
     UInt64ValueParser(const std::vector<std::string>& raw_data,
         const std::pair<uint64_t, uint64_t>& value_section, size_t row_length,
         char delimiter = ';');
-
-    ~UInt64ValueParser() = default;
 
     uint64_t get() const;
 };
