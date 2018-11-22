@@ -15,6 +15,6 @@ int main(int argc, char* argv[]) {
         delimiter = argv[2][0];
     }
     vrp::CsvParser parser(argv[1], delimiter);
-    auto input = parser.load_input();
+    auto problem = parser.load_input();
     return 0;
 }

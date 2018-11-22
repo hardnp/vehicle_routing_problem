@@ -77,7 +77,7 @@ CsvParser::~CsvParser() {
     m_csv_file.close();
 }
 
-CsvParser::ProblemInput CsvParser::load_input() const {
+Problem CsvParser::load_input() const {
     auto read_data = read_file(this->m_csv_file);
     auto& content = read_data.first;
     auto& data_ranges = read_data.second;
@@ -87,20 +87,20 @@ CsvParser::ProblemInput CsvParser::load_input() const {
         detail::CostTableParser::table_name,
         detail::TimeTableParser::table_name},
         data_ranges);
-    CsvParser::ProblemInput loaded = {};
-    loaded.customers = detail::CustomerTableParser(content,
+    Problem problem = {};
+    problem.customers = detail::CustomerTableParser(content,
          data_ranges.at("customer"), 8, this->m_delimiter).get();
-    loaded.vehicles = detail::VehicleTableParser(content,
+    problem.vehicles = detail::VehicleTableParser(content,
          data_ranges.at("vehicle"), 5, this->m_delimiter).get();
-    loaded.costs = detail::CostTableParser(content,
-        data_ranges.at("cost"), loaded.customers.size(),
+    problem.costs = detail::CostTableParser(content,
+        data_ranges.at("cost"), problem.customers.size(),
         this->m_delimiter).get();
-    loaded.times = detail::TimeTableParser(content,
-         data_ranges.at("time"), loaded.customers.size(),
+    problem.times = detail::TimeTableParser(content,
+         data_ranges.at("time"), problem.customers.size(),
         this->m_delimiter).get();
-    loaded.max_violated_soft_tw = detail::UInt64ValueParser(content,
+    problem.max_violated_soft_tw = detail::UInt64ValueParser(content,
         data_ranges.at("max_violated_soft_tw"), 1, this->m_delimiter).get();
-    return loaded;
+    return problem;
 }
 
 void CsvParser::save_output(const Solution& sln) const {
