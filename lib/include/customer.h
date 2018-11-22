@@ -4,8 +4,8 @@
 #include <utility>
 #include <vector>
 
-/// Customer representation
 namespace vrp {
+/// Customer representation
 class Customer {
 public:
     uint64_t id = 0;  ///< customer id. 0 is reserved for depot

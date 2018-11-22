@@ -7,8 +7,8 @@
 #include <limits>
 #include <vector>
 
-/// Vehicle Routing Problem representation
 namespace vrp {
+/// Vehicle Routing Problem representation
 class Problem {
 public:
     std::vector<Vehicle> vehicles = {};  ///< vehicles list

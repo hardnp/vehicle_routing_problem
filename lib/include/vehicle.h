@@ -2,8 +2,8 @@
 
 #include <cstdint>
 
-/// Vehicle representation
 namespace vrp {
+/// Vehicle representation
 class Vehicle {
 public:
     uint64_t id = 0;  ///< vehicle id
