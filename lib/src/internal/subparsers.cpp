@@ -155,11 +155,11 @@ TimeTableParser::TimeTableParser(
         this->times.push_back({});
         std::transform(row.cbegin(), row.cend(),
             std::back_inserter(this->times.back()),
-            [](const std::string& s) { return std::stod(s); });
+            [](const std::string& s) { return std::stoull(s); });
     }
 }
 
-std::vector<std::vector<double>> TimeTableParser::get() const {
+std::vector<std::vector<uint64_t>> TimeTableParser::get() const {
     return this->times;
 }
 

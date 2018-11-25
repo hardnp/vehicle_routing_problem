@@ -14,7 +14,7 @@ public:
     std::vector<Vehicle> vehicles = {};  ///< vehicles list
     std::vector<Customer> customers = {};  ///< customer list
     std::vector<std::vector<double>> costs = {};  ///< cost matrix
-    std::vector<std::vector<double>> times = {};  ///< time matrix
+    std::vector<std::vector<uint64_t>> times = {};  ///< time matrix
     uint64_t max_violated_soft_tw =
         std::numeric_limits<uint64_t>::max();   ///< max number of violated
                                                 /// soft time windows

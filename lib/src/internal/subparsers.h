@@ -91,7 +91,7 @@ public:
  *  > matrix NxN where N is the number of customers
  */
 class TimeTableParser : public BaseParser {
-    std::vector<std::vector<double>> times = {};
+    std::vector<std::vector<uint64_t>> times = {};
 public:
     static constexpr char table_name[] = "time";
 
@@ -99,7 +99,7 @@ public:
         const std::pair<uint64_t, uint64_t>& table_section, size_t row_length,
         char delimiter = ';');
 
-    std::vector<std::vector<double>> get() const;
+    std::vector<std::vector<uint64_t>> get() const;
 };
 
 /// 64-bit unsigned integer parser
