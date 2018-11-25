@@ -14,5 +14,8 @@ public:
     using CustomerIndex = size_t;  ///< customer index in problem's vector
                                    /// index != id
     std::vector<std::pair<VehicleIndex, std::vector<CustomerIndex>>> routes;
+
+	Solution() {};
+	Solution(const Problem& prb) {};
 };
 }  // vrp

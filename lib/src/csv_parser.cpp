@@ -7,6 +7,8 @@
 #include <map>
 #include <algorithm>
 #include <stdexcept>
+#include <fstream>
+#include <iostream>
 
 namespace {
 /// Specifies unused variable
@@ -103,8 +105,11 @@ Problem CsvParser::load_input() const {
     return problem;
 }
 
-void CsvParser::save_output(const Solution& sln) const {
-    UNUSED(sln)
+void CsvParser::save_output(const Problem& prb, const Solution& sln) const {
+	std::ofstream outfile("solution.csv");
+	double obj = objective(prb, sln);
+	outfile << obj << std::endl;
+	outfile.close();
     return;
 }
 }  // vrp

@@ -2,6 +2,7 @@
 
 #include "problem.h"
 #include "solution.h"
+#include "objective.h"
 
 #include <string>
 #include <vector>
@@ -19,6 +20,6 @@ public:
 
     Problem load_input() const;
 
-    void save_output(const Solution& sln) const;
+    void save_output(const Problem& prb, const Solution& sln) const;
 };
 }  // vrp
