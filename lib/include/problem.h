@@ -2,7 +2,6 @@
 
 #include "vehicle.h"
 #include "customer.h"
-#include "solution.h"
 
 #include <cstdint>
 #include <limits>
@@ -21,7 +20,5 @@ public:
                                                 /// soft time windows
     inline size_t n_customers() const;
     inline size_t n_vehicles() const;
-
-	Solution compute_solution();
 };
 }  // vrp

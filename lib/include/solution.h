@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vehicle.h"
+#include "problem.h"
 
 #include <utility>
 #include <vector>

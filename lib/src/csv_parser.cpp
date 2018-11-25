@@ -107,8 +107,27 @@ Problem CsvParser::load_input() const {
 
 void CsvParser::save_output(const Problem& prb, const Solution& sln) const {
 	std::ofstream outfile("solution.csv");
-	double obj = objective(prb, sln);
-	outfile << obj << std::endl;
+
+	outfile << "Route;" << "Vehicle;" << "Customer;" << "Arrive;" << "Begin;" << "End;" << "Leave;" << "Distance from previous;" << "Depot distance;" << std::endl;
+
+	char del = ';';
+
+	for (size_t i = 0; i < sln.routes.size(); ++i) {
+		for (size_t j = 0; j < sln.routes[i].second.size(); ++j) {
+
+			double prev_dist = 0;
+			if (j > 0) 
+				prev_dist = prb.costs[prb.customers[sln.routes[i].second[j]].id][prb.customers[sln.routes[i].second[j - 1]].id];
+			
+			outfile << i << del << prb.vehicles[sln.routes[i].first].id << del
+				<< prb.customers[sln.routes[i].second[j]].id << del <<
+				/*time 4 fields*/ prev_dist << del <<
+				prb.costs[prb.customers[sln.routes[i].second[j]].id][0] << std::endl; //depot <-> first string
+			//we should have vector of waitings and calculate times as costs but 
+			//time = prev_time + times[i][j] + waiting[i][j]
+		}
+	}
+
 	outfile.close();
     return;
 }
