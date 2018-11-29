@@ -21,6 +21,7 @@ public:
 
     Problem load_input() const;
 
-    void save_output(const Problem& prb, const Solution& sln) const;
+    void save_output(const std::string& out_path, const Problem& prb,
+		const Solution& sln) const;
 };
 }  // vrp

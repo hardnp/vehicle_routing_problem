@@ -7,8 +7,6 @@
 #include <map>
 #include <algorithm>
 #include <stdexcept>
-#include <fstream>
-#include <iostream>
 
 namespace {
 /// Specifies unused variable
@@ -105,26 +103,31 @@ Problem CsvParser::load_input() const {
     return problem;
 }
 
-void CsvParser::save_output(const Problem& prb, const Solution& sln) const {
-	std::ofstream outfile("solution.csv");
+void CsvParser::save_output(const std::string& out_path, const Problem& prb,
+    const Solution& sln) const {
 
-	outfile << "Route;" << "Vehicle;" << "Customer;" << "Arrive;" << "Begin;" << "End;" << "Leave;" << "Distance from previous;" << "Depot distance;" << std::endl;
+	std::ofstream outfile(out_path + std::string("/solution.csv"));
+
+	outfile << "Route;" << "Vehicle;" << "Customer;" << "Arrival;" << "Start;" <<
+		"Finish;" << "Leave;" << "Distance from previous;" << "Distance from depot\n";
 
 	char del = ';';
 
-	for (size_t i = 0; i < sln.routes.size(); ++i) {
-		for (size_t j = 0; j < sln.routes[i].second.size(); ++j) {
+	// for calculating distance from previous customer
+	auto prev_dist = [&prb, &sln](size_t i, size_t j) {
+		return prb.costs[prb.customers[sln.routes[i].second[j]].id]
+			[prb.customers[sln.routes[i].second[j - 1]].id]; };
 
-			double prev_dist = 0;
-			if (j > 0) 
-				prev_dist = prb.costs[prb.customers[sln.routes[i].second[j]].id][prb.customers[sln.routes[i].second[j - 1]].id];
+	for (size_t i = 0; i < sln.routes.size(); ++i) {
+		const auto& route = sln.routes[i];
+
+		for (size_t j = 1; j < route.second.size(); ++j) { // assuming the first node is depot
+			double prev_cust_dist = prev_dist(i, j);
 			
 			outfile << i << del << prb.vehicles[sln.routes[i].first].id << del
-				<< prb.customers[sln.routes[i].second[j]].id << del <<
-				/*time 4 fields*/ prev_dist << del <<
-				prb.costs[prb.customers[sln.routes[i].second[j]].id][0] << std::endl; //depot <-> first string
-			//we should have vector of waitings and calculate times as costs but 
-			//time = prev_time + times[i][j] + waiting[i][j]
+				<< prb.customers[sln.routes[i].second[j]].id << del << 0
+				<< del << 0 << del << 0 << del << 0 << del << prev_cust_dist
+				<< del << prb.costs[prb.customers[sln.routes[i].second[j]].id][0] << "\n";
 		}
 	}
 
