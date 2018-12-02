@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""
+Solomon instance converter
+
+Run: python3 script/solomon.py <path to instance>...
+
+Multiple instance conversion is supported
+"""
 import argparse
 import os
 import sys
@@ -108,7 +115,7 @@ def main():
     if not os.path.isdir(test_data):
         os.makedirs(test_data)
     for i, instance in enumerate(args.instances):
-        print('{current}/{all} {instance}'.format(
+        print('[{current}/{all}] {instance}'.format(
             current=i+1, all=len(args.instances), instance=instance))
         # print('Reading {instance} ...'.format(instance=instance))
         vnumber, vcapacity, customers = 0, 0, []
