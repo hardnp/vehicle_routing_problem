@@ -1,6 +1,9 @@
 #include "csv_parser.h"
+#include "solution.h"
+#include "initial_heuristics.h"
 
 #include <iostream>
+#include <iterator>
 
 /// Main entry-point to solver
 int main(int argc, char* argv[]) {
@@ -16,5 +19,15 @@ int main(int argc, char* argv[]) {
     }
     vrp::CsvParser parser(argv[1], delimiter);
     auto problem = parser.load_input();
+    std::vector<vrp::Solution> solutions = {};
+    for (int8_t heuristic = static_cast<int8_t>(vrp::InitialHeuristic::Savings);
+        heuristic < static_cast<int8_t>(vrp::InitialHeuristic::None);
+        ++heuristic) {
+        auto heuristic_solutions = vrp::create_initial_solutions(problem,
+            vrp::InitialHeuristic::ClusterFirstRouteSecond);
+        solutions.insert(solutions.end(),
+            std::make_move_iterator(heuristic_solutions.begin()),
+            std::make_move_iterator(heuristic_solutions.end()));
+    }
     return 0;
 }
