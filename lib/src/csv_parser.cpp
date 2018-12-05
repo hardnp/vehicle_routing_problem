@@ -109,25 +109,33 @@ void CsvParser::save_output(const std::string& out_path, const Problem& prb,
 	std::ofstream outfile(out_path + std::string("/solution.csv"));
 
 	outfile << "Route;" << "Vehicle;" << "Customer;" << "Arrival;" << "Start;" <<
-		"Finish;" << "Leave;" << "Distance from previous;" << "Distance from depot\n";
+		"Finish and leave;" << "Distance from previous;" << "Distance from depot\n";
 
 	char del = ';';
 
 	// for calculating distance from previous customer
-	auto prev_dist = [&prb, &sln](size_t i, size_t j) {
-		return prb.costs[prb.customers[sln.routes[i].second[j]].id]
-			[prb.customers[sln.routes[i].second[j - 1]].id]; };
+	auto prev_dist = [&prb](const auto& route, size_t i) {
+		return prb.costs[route.second[i].id]
+			[route.second[i - 1].id]; };
 
 	for (size_t i = 0; i < sln.routes.size(); ++i) {
 		const auto& route = sln.routes[i];
 
 		for (size_t j = 1; j < route.second.size(); ++j) { // assuming the first node is depot
-			double prev_cust_dist = prev_dist(i, j);
+			double prev_cust_dist = prev_dist(route, j);
 			
-			outfile << i << del << prb.vehicles[sln.routes[i].first].id << del
-				<< prb.customers[sln.routes[i].second[j]].id << del << 0
-				<< del << 0 << del << 0 << del << 0 << del << prev_cust_dist
-				<< del << prb.costs[prb.customers[sln.routes[i].second[j]].id][0] << "\n";
+			auto veh_id = prb.vehicles[route.first].id;
+			outfile << i << del << veh_id << del
+				<< route.second[j].id << del;
+			for (auto& times : route.second[j].times) {
+				if (std::get<0>(times) == veh_id) { // seek for current vehicle in split-delivery
+					outfile << std::get<1>(times) << del << std::get<2>(times)
+						<< del << std::get<3>(times) << del;
+					break;
+				}
+			}
+			outfile << prev_cust_dist
+				<< del << prb.costs[route.second[j].id][0] << "\n";
 		}
 	}
 
