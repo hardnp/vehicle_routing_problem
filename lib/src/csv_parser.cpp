@@ -89,7 +89,7 @@ Problem CsvParser::load_input() const {
         data_ranges);
     Problem problem = {};
     problem.customers = detail::CustomerTableParser(content,
-         data_ranges.at("customer"), 8, this->m_delimiter).get();
+         data_ranges.at("customer"), 7, this->m_delimiter).get();
     problem.vehicles = detail::VehicleTableParser(content,
          data_ranges.at("vehicle"), 5, this->m_delimiter).get();
     problem.costs = detail::CostTableParser(content,
