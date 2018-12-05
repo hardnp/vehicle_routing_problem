@@ -98,7 +98,7 @@ Problem CsvParser::load_input() const {
     problem.times = detail::TimeTableParser(content,
          data_ranges.at("time"), problem.customers.size(),
         this->m_delimiter).get();
-    problem.max_violated_soft_tw = detail::UInt64ValueParser(content,
+    problem.max_violated_soft_tw = detail::IntValueParser(content,
         data_ranges.at("max_violated_soft_tw"), 1, this->m_delimiter).get();
     return problem;
 }
