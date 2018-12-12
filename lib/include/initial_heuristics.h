@@ -13,7 +13,7 @@ enum class InitialHeuristic : int8_t {
     Insertion = 1,
     ParallelInsertion = 2,
     ClusterFirstRouteSecond = 3,
-    None = 100
+    Last
 };
 
 /// Create multiple initial solutions with specified heuristic

@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
     auto problem = parser.load_input();
     std::vector<vrp::Solution> solutions = {};
     for (int8_t heuristic = static_cast<int8_t>(vrp::InitialHeuristic::Savings);
-        heuristic < static_cast<int8_t>(vrp::InitialHeuristic::None);
+        heuristic < static_cast<int8_t>(vrp::InitialHeuristic::Last);
         ++heuristic) {
         auto heuristic_solutions = vrp::create_initial_solutions(problem,
             vrp::InitialHeuristic::ClusterFirstRouteSecond);
