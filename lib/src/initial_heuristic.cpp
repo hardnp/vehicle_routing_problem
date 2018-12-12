@@ -10,7 +10,7 @@ std::vector<Solution> create_initial_solutions(const Problem& prob,
         case InitialHeuristic::Insertion: return {};
         case InitialHeuristic::ParallelInsertion: return {};
         case InitialHeuristic::ClusterFirstRouteSecond:
-            return detail::cluster_first_route_second(prob, heuristic, count);
+            return detail::cluster_first_route_second(prob, count);
         default: return {};
     }
 }
