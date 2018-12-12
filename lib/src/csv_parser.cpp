@@ -89,7 +89,7 @@ Problem CsvParser::load_input() const {
         data_ranges);
     Problem problem = {};
     problem.customers = detail::CustomerTableParser(content,
-         data_ranges.at("customer"), 8, this->m_delimiter).get();
+         data_ranges.at("customer"), 7, this->m_delimiter).get();
     problem.vehicles = detail::VehicleTableParser(content,
          data_ranges.at("vehicle"), 5, this->m_delimiter).get();
     problem.costs = detail::CostTableParser(content,
@@ -98,7 +98,7 @@ Problem CsvParser::load_input() const {
     problem.times = detail::TimeTableParser(content,
          data_ranges.at("time"), problem.customers.size(),
         this->m_delimiter).get();
-    problem.max_violated_soft_tw = detail::UInt64ValueParser(content,
+    problem.max_violated_soft_tw = detail::IntValueParser(content,
         data_ranges.at("max_violated_soft_tw"), 1, this->m_delimiter).get();
     return problem;
 }
@@ -115,25 +115,26 @@ void CsvParser::save_output(const std::string& out_path, const Problem& prb,
 
 	// for calculating distance from previous customer
 	auto prev_dist = [&prb](const auto& route, size_t i) {
-		return prb.costs[route.second[i].id]
-			[route.second[i - 1].id]; };
+		return prb.costs[route.second[i].id][route.second[i - 1].id]; 
+	};
 
 	for (size_t i = 0; i < sln.routes.size(); ++i) {
 		const auto& route = sln.routes[i];
 
-		for (size_t j = 1; j < route.second.size(); ++j) { // assuming the first node is depot
+		for (size_t j = 1; j < route.second.size() - 1; ++j) { // assuming the first node is depot
 			double prev_cust_dist = prev_dist(route, j);
 			
 			auto veh_id = prb.vehicles[route.first].id;
 			outfile << i << del << veh_id << del
 				<< route.second[j].id << del;
-			for (auto& times : route.second[j].times) {
-				if (std::get<0>(times) == veh_id) { // seek for current vehicle in split-delivery
-					outfile << std::get<1>(times) << del << std::get<2>(times)
-						<< del << std::get<3>(times) << del;
-					break;
-				}
-			}
+
+			auto find_veh_id = [&veh_id](const auto& id) { return id.first == veh_id; };
+			// seek for current vehicle in split-delivery
+			auto times = std::find_if(route.second[j].times.begin(),
+				route.second[j].times.end(), find_veh_id);
+
+			outfile << (*times).second;
+
 			outfile << prev_cust_dist
 				<< del << prb.costs[route.second[j].id][0] << "\n";
 		}

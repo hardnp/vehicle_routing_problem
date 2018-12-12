@@ -34,7 +34,7 @@ void throw_if_unexpected_table(
 
 /// Throws if expected >= actual
 void throw_if_small_row(size_t expected, size_t actual,
-    const std::string& table, uint64_t row) {
+    const std::string& table, int row) {
     if (expected > actual) {
         std::stringstream ss;
         ss << "unexpected " << table << " table row " << row << " length: "
@@ -44,7 +44,7 @@ void throw_if_small_row(size_t expected, size_t actual,
 }
 
 /// Throws if section length < expected
-void throw_if_small_section(uint64_t expected, uint64_t section_length,
+void throw_if_small_section(int expected, int section_length,
     const std::string& name = "") {
     if (section_length < expected) {
         std::stringstream ss;
@@ -59,8 +59,8 @@ namespace vrp {
 namespace detail {
 BaseParser::BaseParser(std::string name,
     const std::vector<std::string>& raw_data,
-    const std::pair<uint64_t, uint64_t>& section, uint64_t min_section_size,
-    size_t row_length, char delimiter, uint64_t section_offset) :
+    const std::pair<int, int>& section, int min_section_size,
+    size_t row_length, char delimiter, int section_offset) :
     m_delimiter(delimiter) {
     /// perform basic input checks and split data into rows of string values
     if (!name.empty()) {
@@ -69,7 +69,7 @@ BaseParser::BaseParser(std::string name,
     throw_if_small_section(min_section_size, section.second - section.first,
         table(name));
     auto start = section.first + section_offset;
-    for (uint64_t i = start; i < section.second; ++i) {
+    for (int i = start; i < section.second; ++i) {
         auto values = split(raw_data[i], this->m_delimiter);
         throw_if_small_row(row_length, values.size(), name, i - start);
         this->m_raw_values.push_back(std::move(values));
@@ -79,21 +79,21 @@ BaseParser::BaseParser(std::string name,
 constexpr char CustomerTableParser::table_name[];
 CustomerTableParser::CustomerTableParser(
     const std::vector<std::string>& raw_data,
-    const std::pair<uint64_t, uint64_t>& table_section,
+    const std::pair<int, int>& table_section,
     size_t row_length, char delimiter) :
     BaseParser(CustomerTableParser::table_name, raw_data, table_section, 3,
         row_length, delimiter, 2) {
     for (const auto& row : this->m_raw_values) {
         auto vehicles = std::vector<std::string>(row.cbegin() + 7, row.cend());
-        std::vector<uint64_t> suitable = {};
+        std::vector<int> suitable = {};
         suitable.reserve(vehicles.size());
-        for (const auto& v : vehicles) suitable.push_back(std::stoull(v));
+        for (const auto& v : vehicles) suitable.push_back(std::stoi(v));
         this->customers.push_back({
-            std::stoull(row[0]),
-            std::stoull(row[1]),
-            std::make_pair(std::stoull(row[2]), std::stoull(row[3])),
-            std::make_pair(std::stoull(row[4]), std::stoull(row[5])),
-            std::stoull(row[6]),
+            std::stoi(row[0]),
+            std::stoi(row[1]),
+            std::make_pair(std::stoi(row[2]), std::stoi(row[3])),
+            std::make_pair(std::stoi(row[4]), std::stoi(row[5])),
+            std::stoi(row[6]),
             suitable
         });
     }
@@ -106,15 +106,15 @@ std::vector<Customer> CustomerTableParser::get() const {
 constexpr char VehicleTableParser::table_name[];
 VehicleTableParser::VehicleTableParser(
     const std::vector<std::string>& raw_data,
-    const std::pair<uint64_t, uint64_t>& table_section,
+    const std::pair<int, int>& table_section,
     size_t row_length, char delimiter) :
     BaseParser(VehicleTableParser::table_name, raw_data, table_section, 3,
         row_length, delimiter, 2) {
     for (const auto& row : this->m_raw_values) {
         this->vehicles.push_back({
-            std::stoull(row[0]),
-            std::stoull(row[1]),
-            std::stoull(row[2]),
+            std::stoi(row[0]),
+            std::stoi(row[1]),
+            std::stoi(row[2]),
             std::stod(row[3]),
             std::stod(row[4])
         });
@@ -128,7 +128,7 @@ std::vector<Vehicle> VehicleTableParser::get() const {
 constexpr char CostTableParser::table_name[];
 CostTableParser::CostTableParser(
     const std::vector<std::string>& raw_data,
-    const std::pair<uint64_t, uint64_t>& table_section,
+    const std::pair<int, int>& table_section,
     size_t row_length, char delimiter) :
     BaseParser(CostTableParser::table_name, raw_data, table_section, 2,
         row_length, delimiter, 1) {
@@ -147,7 +147,7 @@ std::vector<std::vector<double>> CostTableParser::get() const {
 constexpr char TimeTableParser::table_name[];
 TimeTableParser::TimeTableParser(
     const std::vector<std::string>& raw_data,
-    const std::pair<uint64_t, uint64_t>& table_section,
+    const std::pair<int, int>& table_section,
     size_t row_length, char delimiter) :
     BaseParser(TimeTableParser::table_name, raw_data, table_section, 2,
         row_length, delimiter, 1) {
@@ -155,22 +155,22 @@ TimeTableParser::TimeTableParser(
         this->times.push_back({});
         std::transform(row.cbegin(), row.cend(),
             std::back_inserter(this->times.back()),
-            [](const std::string& s) { return std::stod(s); });
+            [](const std::string& s) { return std::stoi(s); });
     }
 }
 
-std::vector<std::vector<double>> TimeTableParser::get() const {
+std::vector<std::vector<int>> TimeTableParser::get() const {
     return this->times;
 }
 
-UInt64ValueParser::UInt64ValueParser(const std::vector<std::string>& raw_data,
-    const std::pair<uint64_t, uint64_t>& value_section, size_t row_length,
+IntValueParser::IntValueParser(const std::vector<std::string>& raw_data,
+    const std::pair<int, int>& value_section, size_t row_length,
     char delimiter) :
     BaseParser("", raw_data, value_section, 2, row_length, delimiter, 1) {
-    this->value = std::stoull(this->m_raw_values[0][0]);
+    this->value = std::stoi(this->m_raw_values[0][0]);
 }
 
-uint64_t UInt64ValueParser::get() const {
+int IntValueParser::get() const {
     return value;
 }
 }  // detail
