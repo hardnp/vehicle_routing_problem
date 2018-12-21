@@ -11,14 +11,18 @@ namespace vrp {
 /// Vehicle Routing Problem representation
 class Problem {
 public:
-    std::vector<Vehicle> vehicles = {}; ///< vehicles list
-    std::vector<Customer> customers = {};   ///< customer list
     std::vector<std::vector<double>> costs = {};    ///< cost matrix
+    std::vector<Customer> customers = {};   ///< customer list
+    std::vector<Vehicle> vehicles = {}; ///< vehicles list
     std::vector<std::vector<int>> times = {};   ///< time matrix
     int max_violated_soft_tw =
         std::numeric_limits<int>::max();    ///< max number of violated
                                             /// soft time windows
-    inline size_t n_customers() const;
-    inline size_t n_vehicles() const;
+    inline size_t n_customers() const {
+        return this->customers.size();
+    }
+    inline size_t n_vehicles() const {
+        return this->vehicles.size();
+    }
 };
 }  // vrp
