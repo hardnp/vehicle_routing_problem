@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
         heuristic < static_cast<int8_t>(vrp::InitialHeuristic::Last);
         ++heuristic) {
         auto heuristic_solutions = vrp::create_initial_solutions(problem,
-            vrp::InitialHeuristic::ClusterFirstRouteSecond);
+            static_cast<vrp::InitialHeuristic>(heuristic));
         solutions.insert(solutions.end(),
             std::make_move_iterator(heuristic_solutions.begin()),
             std::make_move_iterator(heuristic_solutions.end()));
