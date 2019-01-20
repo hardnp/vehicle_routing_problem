@@ -2,7 +2,6 @@
 
 #include "problem.h"
 #include "solution.h"
-#include "compute.h"
 #include "objective.h"
 
 #include <string>

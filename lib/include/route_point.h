@@ -19,14 +19,4 @@ public:
 		return out << t.arrive << ';' << t.start << ';' << t.finish << ';';
 	}
 };
-
-/// Route point representation
-class RoutePoint {
-public:
-	int id = 0;  ///< customer id
-	bool splitted = false;  ///< split delivery limiter
-
-	/// vehicle id, arrive, start, finish
-	std::vector<std::pair<int, RoutePointTime>> times;
-};
 }  // vrp

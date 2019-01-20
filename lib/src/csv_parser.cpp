@@ -115,7 +115,7 @@ void CsvParser::save_output(const std::string& out_path, const Problem& prb,
 
 	// for calculating distance from previous customer
 	auto prev_dist = [&prb](const auto& route, size_t i) {
-		return prb.costs[route.second[i].id][route.second[i - 1].id]; 
+		return prb.costs[route.second[i]][route.second[i - 1]]; 
 	};
 
 	for (size_t i = 0; i < sln.routes.size(); ++i) {
@@ -126,21 +126,20 @@ void CsvParser::save_output(const std::string& out_path, const Problem& prb,
 			
 			auto veh_id = prb.vehicles[route.first].id;
 			outfile << i << del << veh_id << del
-				<< route.second[j].id << del;
+				<< route.second[j] << del;
 
-			auto find_veh_id = [&veh_id](const auto& id) { return id.first == veh_id; };
+			auto find_veh_id = [&veh_id](const auto& split) { return split.first == veh_id; };
 			// seek for current vehicle in split-delivery
-			auto times = std::find_if(route.second[j].times.begin(),
-				route.second[j].times.end(), find_veh_id);
+            auto times = std::find_if(sln.times[i].begin(), sln.times[i].end(), find_veh_id);
 
 			outfile << (*times).second;
 
 			outfile << prev_cust_dist
-				<< del << prb.costs[route.second[j].id][0] << "\n";
+				<< del << prb.costs[route.second[j]][0] << "\n";
 		}
 	}
 
-	outfile.close();
+    outfile.close();
     return;
 }
 }  // vrp

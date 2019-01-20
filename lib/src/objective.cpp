@@ -9,8 +9,8 @@ double objective(const Problem& prob, const Solution& sln) {
         const auto& customers = route.second;
         for (size_t i = 0; i < customers.size() - 1; ++i) {
             objective_value += vehicle.variable_cost
-                * prob.costs[customers[i].id][customers[i+1].id];
-            objective_value += A * prob.times[customers[i].id][customers[i+1].id];
+                * prob.costs[customers[i]][customers[i+1]];
+            objective_value += A * prob.times[customers[i]][customers[i+1]];
         }
         objective_value += vehicle.fixed_cost;
     }
