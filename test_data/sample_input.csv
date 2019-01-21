@@ -1,9 +1,9 @@
 table customer
-id; demand; volume; weight; hard_tw_begin; hard_tw_end; soft_tw_begin; soft_tw_end; service_time; suitable_vehicles
-1; 10; 7; 1; 0; 200; 50; 70; 10; 0; 1; 2
-2; 5; 2; 5;  10; 50; 10; 20; 5; 0; 3
-3; 1; 3; 8;  100; 110; 105; 110; 1; 1
-4; 2; 1; 2;  0; 20; 5; 15; 3; 2; 3
+id; volume; weight; hard_tw_begin; hard_tw_end; soft_tw_begin; soft_tw_end; service_time; suitable_vehicles
+1; 7; 1; 0; 200; 50; 70; 10; 0; 1; 2
+2; 2; 5;  10; 50; 10; 20; 5; 0; 3
+3; 3; 8;  100; 110; 105; 110; 1; 1
+4; 1; 2;  0; 20; 5; 15; 3; 2; 3
 
 table vehicle
 id; volume; weight; fixed_cost; variable_cost
