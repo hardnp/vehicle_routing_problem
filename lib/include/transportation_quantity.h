@@ -1,3 +1,5 @@
+#pragma once
+
 namespace vrp {
 /// Transportation Quantity representation
 class TransportationQuantity {
