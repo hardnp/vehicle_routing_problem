@@ -17,9 +17,15 @@ endif()
 if (UNIX)
     # include directory
     set(CPLEX_INCLUDE_DIR "${CPLEX_ROOT_DIR}/cplex/include")
+    set(CPLEX_CONCERT_INCLUDE_DIR "${CPLEX_ROOT_DIR}/concert/include")
     # libraries
-    file(GLOB_RECURSE CPLEX_LIBS "${CPLEX_ROOT_DIR}/cplex/bin/**/libcplex*.so")
-    set(CPLEX_LIBRARIES ${CPLEX_LIBS})
+    # file(GLOB_RECURSE CPLEX_LIBS "${CPLEX_ROOT_DIR}/cplex/bin/**/libcplex*.so")
+    # TODO: is static libs enough or dynamic needed?
+    file(GLOB_RECURSE CPLEX_LIBS
+        "${CPLEX_ROOT_DIR}/cplex/lib/**/*cplex*.a")
+    file(GLOB_RECURSE CPLEX_CONCERT_LIBS
+        "${CPLEX_ROOT_DIR}/concert/lib/**/*concert*.a")
+    set(CPLEX_LIBRARIES ${CPLEX_LIBS} ${CPLEX_CONCERT_LIBS})
 else()
     message(FATAL_ERROR "Finding CPLEX is not implemented for non-UNIX systems")
 endif()
