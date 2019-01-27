@@ -1,5 +1,7 @@
 #include "savings.h"
 #include <algorithm>
+#include <map>
+#include <tuple>
 
 namespace vrp {
 namespace detail {
@@ -8,40 +10,53 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 	using CustomerIndex = size_t;
 	std::vector<std::pair<VehicleIndex, std::vector<CustomerIndex>>> routes;
 
-	for (unsigned int i = 0; i < prob.n_customers; ++i) {
-		routes.push_back({ i, {0,i,0} });
+	for (unsigned int i = 0; i < prob.customers.size(); ++i) {
+		routes.push_back({ i, {0, i, 0} });
 	}
 
 	struct S {
 		unsigned int i;
 		unsigned int j;
-		unsigned int sig;
+		double save_ij;
 	};
 
-	std::vector<S> save(prob.n_customers * prob.n_customers, {0, 0, 0});
+	std::vector<S> save(prob.customers.size() * prob.customers.size(), {0, 0, 0});
 
-	for (unsigned int i = 0; i < prob.n_customers; ++i) {
-		for (unsigned int j = 0; j < prob.n_customers; ++j) {
-			save[i*prob.n_customers + j] = {i, j, prob.costs[i][0] + prob.costs[0][j] - prob.costs[i][j] };
+	for (unsigned int i = 0; i < prob.customers.size(); ++i) {
+		for (unsigned int j = 0; j < prob.customers.size(); ++j) {
+			save[i * prob.customers.size() + j] = {i, j, prob.costs[i][0] + prob.costs[0][j] - prob.costs[i][j] };
 		}
 	}
 
-	std::sort(save.begin(), save.end(), [](const S& a, const S& b) {return a.sig < b.sig; });
-	auto top = save.end();
+	std::sort(save.begin(), save.end(), [](const S & a, const S & b) {return a.save_ij < b.save_ij; });
 
-	while (top > save.begin()) {  // main cycle
-		top = save.end() - 1;
+	const int REGULATOR = std::min((size_t)3, save.size()); // check 3 best savings
 
-		int flag1 = 0; // need 0-i edge
-		int flag2 = 0; // need j-0 edge
+	// times for customer
+	struct Time {
+		unsigned int start;
+		unsigned int finish;
+	};
+    std::map<CustomerIndex, Time> times;
 
-		for (auto& a : routes) {
-			if (a.second[0] == 0 && a.second[1] == top->i) flag1 = 1;
-			if (a.second[a.second.size()-1] == 0 && a.second[a.second.size() - 2] == top->j) flag2 = 1;
-		}
+	for (auto i = 0; i < prob.customers.size(); ++i) {
+		times[prob.customers[i].id] = {(unsigned int)prob.customers[i].hard_tw.first, (unsigned int)prob.customers[i].hard_tw.second};
+	}
 
-		if (flag1 && flag2) { // check if route will be feasible
+    std::vector<S> fine;
 
+	while (save.size() > 0) { // main cycle
+
+		for (int r = 0; r < REGULATOR; ++r) {
+			if (times[save[save.size() - 1 - r].j].start - times[save[save.size() - 1 - r].i].finish
+			        - prob.times[save[save.size() - 1 - r].j][save[save.size() - 1 - r].i] >= 0) {
+				// fine
+				fine.push_back(save[save.size() - 1 - r]);
+			} else {
+				int offset = times[save[save.size() - 1 - r].i].finish
+				             + prob.times[save[save.size() - 1 - r].j][save[save.size() - 1 - r].i] - times[save[save.size() - 1 - r].j].start;
+				// check the rest of root with offset
+			}
 		}
 
 		//
