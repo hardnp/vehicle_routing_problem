@@ -34,13 +34,13 @@ endif()
 
 # add CMAKE_MODULE_PATH entries for local modules discovery
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
-# message(FATAL_ERROR ${CMAKE_MODULE_PATH})
 
 # find CPLEX if CPLEX_DIR is set
 option(WITH_CPLEX "Enable IBM CPLEX heuristics" OFF)
 if (${WITH_CPLEX})
     include(cplex)
     message("CPLEX include directory: ${CPLEX_INCLUDE_DIR}")
+    message("CONCERT include directory: ${CPLEX_CONCERT_INCLUDE_DIR}")
     message("CPLEX libraries: ${CPLEX_LIBRARIES}")
 endif()
 
