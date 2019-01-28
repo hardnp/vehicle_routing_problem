@@ -6,9 +6,6 @@
 #include "stub_cfrs_cplex_inl.hpp"
 #endif
 
-/// Specify that the variable x is unused in the code
-#define UNUSED(x) (void)x
-
 namespace vrp {
 namespace detail {
 

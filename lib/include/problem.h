@@ -24,5 +24,12 @@ public:
     inline size_t n_vehicles() const {
         return this->vehicles.size();
     }
+    inline size_t n_suitable_vehicles(size_t customer) const {
+        auto n = this->customers[customer].suitable_vehicles.size();
+        if (n) {
+            return n;
+        }
+        return this->n_vehicles();
+    }
 };
 }  // vrp
