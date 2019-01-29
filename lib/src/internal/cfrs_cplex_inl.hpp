@@ -39,7 +39,7 @@ class Heuristic {
     std::vector<IloIntVarArray> m_x;  ///< x[i][t]: 1 if customer i is assigned
                                       /// to vehicle t. index is customer
     IloModel m_model = IloModel(m_env);
-    IloCplex m_algo = IloCplex(m_env);
+    IloCplex m_algo = IloCplex(m_model);
     IloObjective m_objective;
 public:
     /// Reference: A Computational Study of a New Heuristic for the
