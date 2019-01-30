@@ -70,11 +70,11 @@ public:
     Heuristic(const Problem& prob) : m_prob(prob) {
         // m_algo.setOut(m_env.getNullStream());
 
-        auto n_customers = prob.n_customers();
+        const auto n_customers = prob.n_customers();
 
         for (size_t i = 1; i < n_customers; ++i) {
-            auto size = prob.n_suitable_vehicles(i);
-            m_x.emplace_back(IloIntVarArray(m_env, size, 0, 1));
+            auto size = prob.allowed_vehicles(i).size();
+            m_x.emplace_back(IloIntVarArray(m_env, size, 0.0, 1.0));
         }
 
         const auto& V = prob.vehicles;
@@ -121,10 +121,10 @@ public:
                 for (size_t i = 1; i < n_customers; ++i) {
                     const auto& c = prob.customers[i];
                     // TODO: the rest is questionable
-                    auto coeff = is_vehicle_allowed(i, t) * c.demand;
-                    auto index = index_of_vehicle(i, t);
-                    if (index < 0) continue;
-                    sum += coeff * m_x[i-1][index];
+                    auto coeff = is_vehicle_allowed(t, i) * c.demand;
+                    // auto index = index_of_vehicle(i, t);
+                    // if (index < 0) continue;
+                    sum += coeff * m_x[i-1][t];
                 }
                 balancing_constraints.add(sum <= total_capacity * m_objective);
             }
@@ -145,7 +145,7 @@ public:
     }
 
     /// 1 if vehicle is allowable, 0 otherwise. a[t][i]
-    int is_vehicle_allowed(size_t customer, size_t vehicle) const {
+    int is_vehicle_allowed(size_t vehicle, size_t customer) const {
         const auto& vehicles = m_prob.customers[customer].suitable_vehicles;
         if (vehicles.empty()) {
             return 1;
@@ -153,6 +153,27 @@ public:
         bool allowed =  vehicles.cend() != std::find(vehicles.cbegin(),
             vehicles.cend(), static_cast<int>(vehicle));
         return static_cast<int>(allowed);
+    }
+
+    std::vector<double> get_values(size_t i) const {
+        const auto& vars = m_x[i];
+        IloNumArray vals(m_env);
+        m_algo.getValues(vals, vars);
+        std::vector<double> converted{};
+        converted.reserve(vals.getSize());
+        for (IloInt i = 0; i < vals.getSize(); ++i) {
+            converted.emplace_back(static_cast<double>(vals[i]));
+        }
+        return converted;
+    }
+
+    std::vector<std::vector<double>> get_values() const {
+        std::vector<std::vector<double>> vals{};
+        vals.reserve(m_x.size());
+        for (size_t i = 0; i < m_x.size(); ++i) {
+            vals.emplace_back(std::move(get_values(i)));
+        }
+        return vals;
     }
 
     inline IloEnv& env() { return m_env; }
@@ -168,6 +189,7 @@ std::vector<Solution> cfrs_impl(const Problem& prob, size_t count) {
     h.solve();
     auto obj_value = h.algo().getObjValue();
     LOG_INFO << "Objective = " << obj_value << EOL;
+    auto all_values = h.get_values();
     UNUSED(obj_value);
     // TODO: find seeds. solve again with updated function
     return {};

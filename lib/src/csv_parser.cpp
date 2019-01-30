@@ -100,6 +100,7 @@ Problem CsvParser::load_input() const {
         this->m_delimiter).get();
     problem.max_violated_soft_tw = detail::IntValueParser(content,
         data_ranges.at("max_violated_soft_tw"), 1, this->m_delimiter).get();
+    problem.set_up();
     return problem;
 }
 
