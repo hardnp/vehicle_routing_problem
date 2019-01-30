@@ -15,8 +15,17 @@ using namespace std;
 /// Specify that the variable x is unused in the code
 #define UNUSED(x) (void)x
 
-/// Report an error
-#define ERROR_OUT(msg) std::cerr << "---\n" << msg << "\n---" << "\n";
+/// INFO stream
+#define LOG_INFO std::cout << "[INFO] "
+
+/// ERROR stream
+#define LOG_ERROR std::cerr << "[ERROR] "
+
+/// End of line, without stream flushing
+#define EOL "\n"
+
+/// End of line, with stream flushing
+#define EOL_FLUSH std::endl
 
 namespace vrp {
 namespace detail {
@@ -130,7 +139,7 @@ public:
     void solve() {
         if (!m_algo.solve()) {
             static const constexpr char msg[] = "IloAlgorithm::solve() failed!";
-            ERROR_OUT(msg);
+            LOG_ERROR << msg << "\n";
             throw std::runtime_error(msg);
         }
     }
@@ -158,7 +167,7 @@ std::vector<Solution> cfrs_impl(const Problem& prob, size_t count) {
     Heuristic h(prob);
     h.solve();
     auto obj_value = h.algo().getObjValue();
-    ERROR_OUT(obj_value);
+    LOG_INFO << "Objective = " << obj_value << EOL;
     UNUSED(obj_value);
     // TODO: find seeds. solve again with updated function
     return {};
