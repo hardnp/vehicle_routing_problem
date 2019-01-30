@@ -41,6 +41,20 @@ class Heuristic {
     IloModel m_model = IloModel(m_env);
     IloCplex m_algo = IloCplex(m_model);
     IloObjective m_objective;
+
+    inline int index_of_vehicle(size_t customer, size_t vehicle) {
+        const auto& vehicles = m_prob.customers[customer].suitable_vehicles;
+        if (vehicles.empty()) {
+            return -1;
+        }
+        auto v = std::find(vehicles.cbegin(), vehicles.cend(),
+            static_cast<int>(vehicle));
+        if (vehicles.cend() == v) {
+            return -1;
+        }
+        return std::distance(vehicles.cbegin(), v);
+    }
+
 public:
     /// Reference: A Computational Study of a New Heuristic for the
     /// Site-Dependent Vehicle Routing Problem. Chao, Golden, Wasil. 1998
@@ -54,11 +68,11 @@ public:
             m_x.emplace_back(IloIntVarArray(m_env, size, 0, 1));
         }
 
+        const auto& V = prob.vehicles;
         {
             // (1)
             // TODO: is the function correct?
             IloExprArray capacity_fractions(m_env);
-            const auto& V = prob.vehicles;
             auto total_capacity = std::accumulate(V.cbegin(), V.cend(), 0,
                 [] (int init, const Vehicle& v) { return init + v.capacity; });
             for (size_t k = 0; k < V.size(); ++k) {
@@ -92,16 +106,16 @@ public:
             // (3)
             // TODO: is this correct?
             IloConstraintArray balancing_constraints(m_env);
-            for (size_t t = 0; t < prob.vehicles.size(); ++t) {
-                int total_capacity = prob.vehicles[t].capacity;
+            for (size_t t = 0; t < V.size(); ++t) {
+                int total_capacity = V[t].capacity;
                 IloExpr sum(m_env);
                 for (size_t i = 1; i < n_customers; ++i) {
                     const auto& c = prob.customers[i];
                     // TODO: the rest is questionable
                     auto coeff = is_vehicle_allowed(i, t) * c.demand;
-                    for (IloInt j = 0; j < m_x[i-1].getSize(); ++j) {
-                        sum += coeff * m_x[i-1][j];
-                    }
+                    auto index = index_of_vehicle(i, t);
+                    if (index < 0) continue;
+                    sum += coeff * m_x[i-1][index];
                 }
                 balancing_constraints.add(sum <= total_capacity * m_objective);
             }
