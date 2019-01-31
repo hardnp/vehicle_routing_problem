@@ -64,6 +64,12 @@ class Heuristic {
         return std::distance(vehicles.cbegin(), v);
     }
 
+    void add_zero_constraint(size_t i, IloInt t) {
+        IloExpr zero_expr(m_env);
+        zero_expr = m_x[i][t];
+        m_model.add(IloConstraint(zero_expr == 0));
+    }
+
 public:
     /// Reference: A Computational Study of a New Heuristic for the
     /// Site-Dependent Vehicle Routing Problem. Chao, Golden, Wasil. 1998
@@ -73,8 +79,19 @@ public:
         const auto n_customers = prob.n_customers();
 
         for (size_t i = 1; i < n_customers; ++i) {
-            auto size = prob.allowed_vehicles(i).size();
+            const auto size = prob.allowed_vehicles(i).size();
             m_x.emplace_back(IloIntVarArray(m_env, size, 0.0, 1.0));
+        }
+
+        // TODO: too many constraints??
+        // zero-out variables that correspond to unallowed vehicles
+        for (size_t i = 1; i < n_customers; ++i) {
+            const auto& allowed = prob.allowed_vehicles(i);
+            for (IloInt t = 0; t < m_x[i-1].getSize(); ++t) {
+                if (!allowed[t]) {
+                    add_zero_constraint(i-1, t);
+                }
+            }
         }
 
         const auto& V = prob.vehicles;
@@ -82,15 +99,14 @@ public:
             // (1)
             // TODO: is the function correct?
             IloExprArray capacity_fractions(m_env);
-            auto total_capacity = std::accumulate(V.cbegin(), V.cend(), 0,
-                [] (int init, const Vehicle& v) { return init + v.capacity; });
-            for (size_t k = 0; k < V.size(); ++k) {
+            for (size_t t = 0; t < V.size(); ++t) {
+                // total capacity for current model degrades into capacity of a
+                // vehicle
+                const auto total_capacity = V[t].capacity;
                 IloExpr fraction(m_env);
                 for (size_t i = 1; i < n_customers; ++i) {
-                    for (IloInt t = 0; t < m_x[i-1].getSize(); ++t) {
-                        fraction +=
-                            (m_x[i-1][t] * V[k].capacity);
-                    }
+                    // always 1 element in vehicle type for current model
+                    fraction += m_x[i-1][t] * V[t].capacity;
                 }
                 capacity_fractions.add(fraction / total_capacity);
             }
@@ -101,12 +117,14 @@ public:
         {
             // (2)
             IloConstraintArray allowability_constraints(m_env);
-            for (const auto& array : m_x) {
+            for (size_t i = 1; i < n_customers; ++i){
+            // for (const auto& array : m_x) {
+                const auto& array = m_x[i-1];
                 IloExpr sum(m_env);
-                for (IloInt i = 0; i < array.getSize(); ++i) {
-                    sum += array[i];
+                for (IloInt t = 0; t < array.getSize(); ++t) {
+                    sum += array[t];
                 }
-                allowability_constraints.add(sum == 1.0);
+                allowability_constraints.add(sum == 1);
             }
             m_model.add(allowability_constraints);
         }
@@ -121,7 +139,8 @@ public:
                 for (size_t i = 1; i < n_customers; ++i) {
                     const auto& c = prob.customers[i];
                     // TODO: the rest is questionable
-                    auto coeff = is_vehicle_allowed(t, i) * c.demand;
+                    // auto coeff = is_vehicle_allowed(t, i) * c.demand;
+                    auto coeff = c.demand;
                     // auto index = index_of_vehicle(i, t);
                     // if (index < 0) continue;
                     sum += coeff * m_x[i-1][t];
