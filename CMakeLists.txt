@@ -16,7 +16,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR
     set(CMAKE_CXX_FLAGS_DEBUG
         "${CMAKE_CXX_FLAGS} -Wall -Werror -g -O0")
     set(CMAKE_CXX_FLAGS_RELEASE
-        "${CMAKE_CXX_FLAGS} -Wall -Werror -O3")
+        "${CMAKE_CXX_FLAGS} -Wall -Werror -O3 -DNDEBUG")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-function")
     # ignored due to cplex:
@@ -24,12 +24,12 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     set(CMAKE_CXX_FLAGS_DEBUG
         "${CMAKE_CXX_FLAGS} -Wall -Werror -g -O0")
     set(CMAKE_CXX_FLAGS_RELEASE
-        "${CMAKE_CXX_FLAGS} -Wall -Werror -O3")
+        "${CMAKE_CXX_FLAGS} -Wall -Werror -O3 -DNDEBUG")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     set(CMAKE_CXX_FLAGS_DEBUG
         "${CMAKE_CXX_FLAGS} /Wall /WX /O0")
     set(CMAKE_CXX_FLAGS_RELEASE
-        "${CMAKE_CXX_FLAGS} /Wall /WX /O3")
+        "${CMAKE_CXX_FLAGS} /Wall /WX /O3 -DNDEBUG")
 endif()
 
 # add CMAKE_MODULE_PATH entries for local modules discovery
