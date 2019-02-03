@@ -33,6 +33,11 @@ namespace vrp {
 namespace detail {
 
 namespace {
+// TODO: this must be fixed!
+inline int volume(const TransportationQuantity& q) {
+    return q.volume;
+}
+
 /// Heuristic class that solves the relaxed 0-1 Integer Problem
 class Heuristic {
     const Problem& m_prob;
@@ -112,11 +117,11 @@ public:
             for (size_t t = 0; t < V.size(); ++t) {
                 // total capacity for current model degrades into capacity of a
                 // vehicle
-                const auto total_capacity = V[t].capacity;
+                const auto total_capacity = volume(V[t].capacity);
                 IloExpr fraction(m_env);
                 for (size_t i = 1; i < n_customers; ++i) {
                     // always 1 element in vehicle type for current model
-                    fraction += m_x[i-1][t] * V[t].capacity;
+                    fraction += m_x[i-1][t] * volume(V[t].capacity);
                 }
                 capacity_fractions.add(fraction / total_capacity);
             }
@@ -145,12 +150,12 @@ public:
             // TODO: is this correct?
             IloConstraintArray balancing_constraints(m_env);
             for (size_t t = 0; t < V.size(); ++t) {
-                int total_capacity = V[t].capacity;
+                int total_capacity = volume(V[t].capacity);
                 IloExpr sum(m_env);
                 for (size_t i = 1; i < n_customers; ++i) {
                     const auto& c = prob.customers[i];
                     // TODO: the rest is questionable
-                    auto coeff = c.demand;
+                    auto coeff = volume(c.demand);
                     sum += coeff * m_x[i-1][t];
                 }
                 balancing_constraints.add(sum <= total_capacity * m_objective);
@@ -228,12 +233,14 @@ std::vector<double> calculate_weights(const Problem& prob) {
     const auto& depot_costs = prob.costs[0];
     const auto max_cost = *std::max_element(depot_costs.cbegin(),
         depot_costs.cend());
-    const auto max_demand = std::max_element(prob.customers.cbegin()+1,
+    const auto max = std::max_element(prob.customers.cbegin()+1,
         prob.customers.cend(), [] (const auto& a, const auto& b) {
-            return a.demand < b.demand; })->demand;
+            return volume(a.demand) < volume(b.demand); });
+    const auto max_demand = volume(max->demand);
     std::vector<double> weights(size - 1, 0);
     for (size_t i = 1; i < size; ++i) {
-        weights[i-1] = (prob.customers[i].demand / max_demand)
+        int c_demand = volume(prob.customers[i].demand);
+        weights[i-1] = (c_demand / max_demand)
             + (depot_costs[i] / max_cost);
     }
     return weights;
