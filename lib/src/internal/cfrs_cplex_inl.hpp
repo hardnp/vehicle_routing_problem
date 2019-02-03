@@ -33,15 +33,6 @@ namespace vrp {
 namespace detail {
 
 namespace {
-template<typename T>
-bool are_equal(T a, T b, int units_in_last_place = 2)
-{
-return std::abs(a - b) <= std::numeric_limits<T>::epsilon()
-                            * std::max(std::abs(a), std::abs(b))
-                            * units_in_last_place
-        || std::abs(a - b) < std::numeric_limits<T>::min(); // subnormal result
-}
-
 /// Heuristic class that solves the relaxed 0-1 Integer Problem
 class Heuristic {
     const Problem& m_prob;
@@ -84,6 +75,7 @@ public:
     inline IloModel& model() { return m_model; }
     inline IloCplex& algo() { return m_algo; }
     inline IloObjective& objective() { return m_objective; }
+    inline const Problem& prob() const { return m_prob; }
 
     /// Reference: A Computational Study of a New Heuristic for the
     /// Site-Dependent Vehicle Routing Problem. Chao, Golden, Wasil. 1998
@@ -247,13 +239,10 @@ std::vector<double> calculate_weights(const Problem& prob) {
     return weights;
 }
 
-/// Select seeds for each route
-std::vector<size_t> select_seeds(const Heuristic& h,
-    const std::vector<double>& weights) {
-    // TODO: handle case when seeds.size() != number of vehicles
+/// Get non-constructed groups of customers that belong to the same routes
+std::unordered_map<size_t, std::list<size_t>> group(const Heuristic& h,
+    size_t depot_offset = 0) {
     auto assignment_map = h.get_values();
-    // the customer on the route with the largest seed weight becomes the seed
-    // point of the route
     std::unordered_map<size_t, std::list<size_t>> routes;
     for (size_t c = 0; c < assignment_map.size(); ++c) {
         const auto& vehicles_for_customer = assignment_map[c];
@@ -261,8 +250,19 @@ std::vector<size_t> select_seeds(const Heuristic& h,
             vehicles_for_customer.cend(), 1.0);
         size_t chosen_vehicle_index = std::distance(
             vehicles_for_customer.cbegin(), chosen_vehicle);
-        routes[chosen_vehicle_index].emplace_back(c);
+        routes[chosen_vehicle_index].emplace_back(c + depot_offset);
     }
+    return routes;
+}
+
+/// Select seeds for each route
+std::vector<size_t> select_seeds(const Heuristic& h,
+    const std::vector<double>& weights) {
+    // TODO: handle case when seeds.size() != number of vehicles
+
+    // the customer on the route with the largest seed weight becomes the seed
+    // point of the route
+    auto routes = group(h);
     std::vector<size_t> seeds{};
     seeds.reserve(routes.size());
     for (const auto& vehicle_route : routes) {
@@ -273,6 +273,71 @@ std::vector<size_t> select_seeds(const Heuristic& h,
         seeds.emplace_back(seed_customer + 1); // Note: +1 due to depot
     }
     return seeds;
+}
+
+std::vector<Solution> construct_solutions(const Heuristic& h, size_t count) {
+    count = 1;  // TODO: add randomness
+    std::vector<Solution> solutions(count);
+    // depot_offset = 1 due to depot at index 0. this is important here:
+    auto routes = group(h, 1);
+    // perform allocations:
+    for (size_t i = 0; i < count; ++i) {
+        solutions[i].routes.reserve(routes.size());
+        for (const auto& pair : routes) {
+            solutions[i].routes.emplace_back(std::make_pair(pair.first,
+                std::list<size_t>{}));
+        }
+    }
+    const auto& prob = h.prob();
+    static constexpr const size_t depot = 0;
+    // insertion heuristic, variation 2: c1 is not needed (?), c2 is minimized.
+    // params of c2:
+    static constexpr const double beta_1 = 0.5, beta_2 = 0.5;
+    for (auto& sln : solutions) {
+        for (auto& vehicle_route : sln.routes) {
+            // init
+            auto& route = vehicle_route.second;
+            route.emplace_front(depot);
+            route.emplace_back(depot);
+            auto unrouted = routes[vehicle_route.first];
+            while (!unrouted.empty()) {
+                // as route has a fixed cost/time outside of u "region", we can
+                // simply calculate c2(i, u, j) as for route xx-i-u-j-xx without
+                // adding xx nodes
+
+                // format: customer_id, c2 value, best insertion position
+                using opt_data = std::tuple<size_t, double, size_t>;
+                std::list<opt_data> optimal_c2{};
+                for (const auto& c : unrouted) {
+                    std::list<double> ratings_c2{};
+                    for (auto i = route.cbegin(), j = std::next(i, 1);
+                        j != route.cend(); ++i, ++j) {
+                        auto route_dist = prob.costs[*i][c] + prob.costs[c][*j];
+                        auto route_time = prob.times[*i][c] + prob.times[c][*j];
+                        ratings_c2.emplace_back(
+                            beta_1*route_dist + beta_2*route_time);
+                    }
+                    auto min = std::min_element(ratings_c2.cbegin(),
+                        ratings_c2.cend());
+                    // Note: (distance + 1) to relate to actual route's start at
+                    // depot. otherwise, we'd insert before depot
+                    optimal_c2.emplace_back(std::make_tuple(
+                        c, *min, std::distance(ratings_c2.cbegin(), min) + 1));
+                }
+
+                // find optimal customer and update route
+                auto optimal = *std::min_element(
+                    optimal_c2.cbegin(), optimal_c2.cend(),
+                    [] (const opt_data& a, const opt_data& b) {
+                        return std::get<1>(a) < std::get<1>(b);});
+                const auto& c = std::get<0>(optimal);
+                unrouted.remove(c);
+                route.insert(
+                    std::next(route.cbegin(), std::get<2>(optimal)), c);
+            }
+        }
+    }
+    return solutions;
 }
 }  // anonymous
 
@@ -290,7 +355,7 @@ std::vector<Solution> cfrs_impl(const Problem& prob, size_t count) {
     h.update_with_seeds(seeds);
     h.solve();
     LOG_INFO << "Objective = " << obj_value << EOL;
-    return {};
+    return construct_solutions(h, count);
 }
 
 }  // detail
