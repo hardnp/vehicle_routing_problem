@@ -1,12 +1,14 @@
 #include "cluster_first_route_second.h"
 
-#include <algorithm>
 #include <cassert>
+#include <algorithm>
 #include <random>
 #include <numeric>
 #include <utility>
 #include <iostream>
 #include <stdexcept>
+#include <list>
+#include <unordered_map>
 
 #define ILOUSESTL
 using namespace std;
@@ -50,31 +52,45 @@ class Heuristic {
     IloModel m_model = IloModel(m_env);
     IloCplex m_algo = IloCplex(m_model);
     IloObjective m_objective;
+    IloExprArray m_capacity_fractions;
 
-    inline int index_of_vehicle(size_t customer, size_t vehicle) {
-        const auto& vehicles = m_prob.customers[customer].suitable_vehicles;
-        if (vehicles.empty()) {
-            return -1;
-        }
-        auto v = std::find(vehicles.cbegin(), vehicles.cend(),
-            static_cast<int>(vehicle));
-        if (vehicles.cend() == v) {
-            return -1;
-        }
-        return std::distance(vehicles.cbegin(), v);
-    }
-
-    void add_zero_constraint(size_t i, IloInt t) {
+    inline void add_zero_constraint(size_t i, IloInt t) {
         IloExpr zero_expr(m_env);
         zero_expr = m_x[i][t];
         m_model.add(IloConstraint(zero_expr == 0));
     }
 
+    /// Cost of assigning customer i to vehicle t. General case.
+    double assignment_cost(const std::vector<size_t>& seeds, size_t i) {
+        const auto& c = m_prob.costs;
+        const auto size = seeds.size();
+        std::vector<double> costs(size);
+        for (size_t s = 0; s < size; ++s) {
+            costs[s] = c[0][i] + c[i][s] - c[0][s];
+        }
+        auto minimum = *std::min_element(costs.cbegin(), costs.cend());
+        return minimum;
+    }
+
+    /// Cost of assigning customer i to vehicle t. Single vehicle in type case.
+    inline double assignment_cost(size_t seed, size_t i) {
+        const auto& c = m_prob.costs;
+        return c[0][i] + c[i][seed] - c[0][seed];
+    }
+
 public:
+    inline IloEnv& env() { return m_env; }
+    inline std::vector<IloIntVarArray>& X() { return m_x; }
+    inline IloModel& model() { return m_model; }
+    inline IloCplex& algo() { return m_algo; }
+    inline IloObjective& objective() { return m_objective; }
+
     /// Reference: A Computational Study of a New Heuristic for the
     /// Site-Dependent Vehicle Routing Problem. Chao, Golden, Wasil. 1998
     Heuristic(const Problem& prob) : m_prob(prob) {
-        // m_algo.setOut(m_env.getNullStream());
+#ifdef NDEBUG  // release mode
+        m_algo.setOut(m_env.getNullStream());
+#endif
 
         const auto n_customers = prob.n_customers();
 
@@ -83,13 +99,15 @@ public:
             m_x.emplace_back(IloIntVarArray(m_env, size, 0.0, 1.0));
         }
 
-        // TODO: too many constraints??
-        // zero-out variables that correspond to unallowed vehicles
-        for (size_t i = 1; i < n_customers; ++i) {
-            const auto& allowed = prob.allowed_vehicles(i);
-            for (IloInt t = 0; t < m_x[i-1].getSize(); ++t) {
-                if (!allowed[t]) {
-                    add_zero_constraint(i-1, t);
+        {
+            // TODO: too many constraints??
+            // zero-out variables that correspond to unallowed vehicles
+            for (size_t i = 1; i < n_customers; ++i) {
+                const auto& allowed = prob.allowed_vehicles(i);
+                for (IloInt t = 0; t < m_x[i-1].getSize(); ++t) {
+                    if (!allowed[t]) {
+                        add_zero_constraint(i-1, t);
+                    }
                 }
             }
         }
@@ -110,7 +128,8 @@ public:
                 }
                 capacity_fractions.add(fraction / total_capacity);
             }
-            m_objective = IloMinimize(m_env, IloMax(capacity_fractions));
+            m_capacity_fractions = capacity_fractions;
+            m_objective = IloMinimize(m_env, IloMax(m_capacity_fractions));
             m_model.add(m_objective);
         }
 
@@ -139,10 +158,7 @@ public:
                 for (size_t i = 1; i < n_customers; ++i) {
                     const auto& c = prob.customers[i];
                     // TODO: the rest is questionable
-                    // auto coeff = is_vehicle_allowed(t, i) * c.demand;
                     auto coeff = c.demand;
-                    // auto index = index_of_vehicle(i, t);
-                    // if (index < 0) continue;
                     sum += coeff * m_x[i-1][t];
                 }
                 balancing_constraints.add(sum <= total_capacity * m_objective);
@@ -161,17 +177,6 @@ public:
             LOG_ERROR << msg << "\n";
             throw std::runtime_error(msg);
         }
-    }
-
-    /// 1 if vehicle is allowable, 0 otherwise. a[t][i]
-    int is_vehicle_allowed(size_t vehicle, size_t customer) const {
-        const auto& vehicles = m_prob.customers[customer].suitable_vehicles;
-        if (vehicles.empty()) {
-            return 1;
-        }
-        bool allowed =  vehicles.cend() != std::find(vehicles.cbegin(),
-            vehicles.cend(), static_cast<int>(vehicle));
-        return static_cast<int>(allowed);
     }
 
     std::vector<double> get_values(size_t i) const {
@@ -195,22 +200,96 @@ public:
         return vals;
     }
 
-    inline IloEnv& env() { return m_env; }
-    inline std::vector<IloIntVarArray>& X() { return m_x; }
-    inline IloModel& model() { return m_model; }
-    inline IloCplex& algo() { return m_algo; }
-    inline IloObjective& objective() { return m_objective; }
+    void update_with_seeds(const std::vector<size_t>& seeds) {
+        const auto n_customers = m_prob.n_customers();
+        // (9) calculate total minimal insertion cost
+        double total_distance = 0.0;
+        for (size_t k = 1; k < n_customers; ++k) {
+            const auto& allowed = m_prob.allowed_vehicles(k);
+            assert(allowed.size() == seeds.size());  // guaranteed by design?
+            for (size_t t = 0; t < allowed.size(); ++t) {
+                if (allowed[t]) {
+                    total_distance += assignment_cost(seeds[t], k);
+                }
+            }
+        }
+
+        // (9) calculate normalized minimal insertion cost as a CPLEX function
+        IloExpr insertion_costs(m_env);
+        for (size_t i = 1; i < n_customers; ++i) {
+            const auto& array = m_x[i-1];
+            assert(static_cast<size_t>(array.getSize()) == seeds.size());
+            for (IloInt t = 0; t < array.getSize(); ++t) {
+                insertion_costs += assignment_cost(seeds[t], i) * array[t];
+            }
+        }
+        m_model.remove(m_objective);
+        m_objective = IloMinimize(m_env,
+            IloExpr(insertion_costs + IloMax(m_capacity_fractions)));
+        m_model.add(m_objective);
+    }
 };
+
+/// (6) Calculate weight of each customer
+std::vector<double> calculate_weights(const Problem& prob) {
+    const auto size = prob.n_customers();
+    const auto& depot_costs = prob.costs[0];
+    const auto max_cost = *std::max_element(depot_costs.cbegin(),
+        depot_costs.cend());
+    const auto max_demand = std::max_element(prob.customers.cbegin()+1,
+        prob.customers.cend(), [] (const auto& a, const auto& b) {
+            return a.demand < b.demand; })->demand;
+    std::vector<double> weights(size - 1, 0);
+    for (size_t i = 1; i < size; ++i) {
+        weights[i-1] = (prob.customers[i].demand / max_demand)
+            + (depot_costs[i] / max_cost);
+    }
+    return weights;
+}
+
+/// Select seeds for each route
+std::vector<size_t> select_seeds(const Heuristic& h,
+    const std::vector<double>& weights) {
+    // TODO: handle case when seeds.size() != number of vehicles
+    auto assignment_map = h.get_values();
+    // the customer on the route with the largest seed weight becomes the seed
+    // point of the route
+    std::unordered_map<size_t, std::list<size_t>> routes;
+    for (size_t c = 0; c < assignment_map.size(); ++c) {
+        const auto& vehicles_for_customer = assignment_map[c];
+        auto chosen_vehicle = std::find(vehicles_for_customer.cbegin(),
+            vehicles_for_customer.cend(), 1.0);
+        size_t chosen_vehicle_index = std::distance(
+            vehicles_for_customer.cbegin(), chosen_vehicle);
+        routes[chosen_vehicle_index].emplace_back(c);
+    }
+    std::vector<size_t> seeds{};
+    seeds.reserve(routes.size());
+    for (const auto& vehicle_route : routes) {
+        const auto& route = vehicle_route.second;
+        auto seed_customer = *std::max_element(route.cbegin(), route.cend(),
+            [&weights] (size_t a, size_t b) {
+                return weights[a] < weights[b]; });
+        seeds.emplace_back(seed_customer + 1); // Note: +1 due to depot
+    }
+    return seeds;
+}
 }  // anonymous
 
 std::vector<Solution> cfrs_impl(const Problem& prob, size_t count) {
+    auto weights = calculate_weights(prob);
     Heuristic h(prob);
     h.solve();
     auto obj_value = h.algo().getObjValue();
     LOG_INFO << "Objective = " << obj_value << EOL;
-    auto all_values = h.get_values();
-    UNUSED(obj_value);
-    // TODO: find seeds. solve again with updated function
+    // we currently use vehicle_types_size == vehicles_size, so for each type
+    // there's exactly one route. since we don't really care about actual route
+    // construction right now, only about route seeds, we can skip route
+    // construction and start updating heuristic right away
+    auto seeds = select_seeds(h, weights);
+    h.update_with_seeds(seeds);
+    h.solve();
+    LOG_INFO << "Objective = " << obj_value << EOL;
     return {};
 }
 
