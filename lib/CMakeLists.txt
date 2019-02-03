@@ -7,7 +7,7 @@ project(vrp)
 file(GLOB_RECURSE SOURCES src/*.cpp)
 
 # create library
-add_library(${PROJECT_NAME} STATIC ${SOURCES})
+add_library(${PROJECT_NAME} STATIC ${SOURCES} src/internal/seq_insertion.cpp include/seq_insertion.h)
 
 # add include directories visible outside of the library
 # this allows to automatically find header files when build a binary
