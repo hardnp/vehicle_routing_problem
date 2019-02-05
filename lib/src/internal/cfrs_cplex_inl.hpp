@@ -33,9 +33,11 @@ namespace vrp {
 namespace detail {
 
 namespace {
-// TODO: this must be fixed!
 inline int volume(const TransportationQuantity& q) {
     return q.volume;
+}
+inline int weight(const TransportationQuantity& q) {
+    return q.weight;
 }
 
 /// Heuristic class that solves the relaxed 0-1 Integer Problem
@@ -98,6 +100,7 @@ public:
 
         {
             // TODO: too many constraints??
+
             // zero-out variables that correspond to unallowed vehicles
             for (size_t i = 1; i < n_customers; ++i) {
                 const auto& allowed = prob.allowed_vehicles(i);
@@ -111,19 +114,47 @@ public:
 
         const auto& V = prob.vehicles;
         {
+            // Note: double constraints due to volume && weight
             // (1)
             // TODO: is the function correct?
             IloExprArray capacity_fractions(m_env);
             for (size_t t = 0; t < V.size(); ++t) {
                 // total capacity for current model degrades into capacity of a
                 // vehicle
-                const auto total_capacity = volume(V[t].capacity);
-                IloExpr fraction(m_env);
-                for (size_t i = 1; i < n_customers; ++i) {
-                    // always 1 element in vehicle type for current model
-                    fraction += m_x[i-1][t] * volume(V[t].capacity);
+
+                // volume case:
+                const auto total_volume = volume(V[t].capacity);
+                IloExpr volume_fraction(m_env);
+                if (total_volume != 0) {
+                    for (size_t i = 1; i < n_customers; ++i) {
+                        // always 1 element in vehicle type for current model
+                        const auto v = volume(V[t].capacity);
+                        if (v == 0) continue;
+                        volume_fraction += m_x[i-1][t] * v;
+                    }
                 }
-                capacity_fractions.add(fraction / total_capacity);
+
+                // weight case:
+                const auto total_weight = weight(V[t].capacity);
+                IloExpr weight_fraction(m_env);
+                if (total_weight != 0) {
+                    for (size_t i = 1; i < n_customers; ++i) {
+                        // always 1 element in vehicle type for current model
+                        const auto w = weight(V[t].capacity);
+                        if (w == 0) continue;
+                        weight_fraction += m_x[i-1][t] * w;
+                    }
+                }
+
+                // total = volume + weight
+                if (total_volume == 0) {
+                    capacity_fractions.add(weight_fraction / total_weight);
+                } else if (total_weight == 0) {
+                    capacity_fractions.add(volume_fraction / total_volume);
+                } else {
+                    capacity_fractions.add(weight_fraction / total_weight
+                        + volume_fraction / total_volume);
+                }
             }
             m_capacity_fractions = capacity_fractions;
             m_objective = IloMinimize(m_env, IloMax(m_capacity_fractions));
@@ -134,7 +165,6 @@ public:
             // (2)
             IloConstraintArray allowability_constraints(m_env);
             for (size_t i = 1; i < n_customers; ++i){
-            // for (const auto& array : m_x) {
                 const auto& array = m_x[i-1];
                 IloExpr sum(m_env);
                 for (IloInt t = 0; t < array.getSize(); ++t) {
@@ -150,15 +180,33 @@ public:
             // TODO: is this correct?
             IloConstraintArray balancing_constraints(m_env);
             for (size_t t = 0; t < V.size(); ++t) {
-                int total_capacity = volume(V[t].capacity);
-                IloExpr sum(m_env);
-                for (size_t i = 1; i < n_customers; ++i) {
-                    const auto& c = prob.customers[i];
-                    // TODO: the rest is questionable
-                    auto coeff = volume(c.demand);
-                    sum += coeff * m_x[i-1][t];
+                // volume case:
+                const auto total_volume = volume(V[t].capacity);
+                if (total_volume != 0) {
+                    IloExpr volume_sum(m_env);
+                    for (size_t i = 1; i < n_customers; ++i) {
+                        const auto v = volume(prob.customers[i].demand);
+                        if (v == 0) continue;
+                        // TODO: questionable
+                        volume_sum += v * m_x[i-1][t];
+                    }
+                    balancing_constraints.add(
+                        volume_sum <= total_volume * m_objective);
                 }
-                balancing_constraints.add(sum <= total_capacity * m_objective);
+
+                // weight case:
+                const auto total_weight = weight(V[t].capacity);
+                if (total_weight) {
+                    IloExpr weight_sum(m_env);
+                    for (size_t i = 1; i < n_customers; ++i) {
+                        const auto w = weight(prob.customers[i].demand);
+                        if (w == 0) continue;
+                        // TODO: questionable
+                        weight_sum += w * m_x[i-1][t];
+                    }
+                    balancing_constraints.add(
+                        weight_sum <= total_weight * m_objective);
+                }
             }
             m_model.add(balancing_constraints);
         }
@@ -227,6 +275,13 @@ public:
     }
 };
 
+inline double divide(int divident, int divider) {
+    if (divider == 0) {
+        return 0.0;
+    }
+    return static_cast<double>(divident) / divider;
+}
+
 /// (6) Calculate weight of each customer
 std::vector<double> calculate_weights(const Problem& prob) {
     const auto size = prob.n_customers();
@@ -235,12 +290,14 @@ std::vector<double> calculate_weights(const Problem& prob) {
         depot_costs.cend());
     const auto max = std::max_element(prob.customers.cbegin()+1,
         prob.customers.cend(), [] (const auto& a, const auto& b) {
-            return volume(a.demand) < volume(b.demand); });
-    const auto max_demand = volume(max->demand);
+            return a.demand < b.demand; });
+    const auto max_volume = volume(max->demand);
+    const auto max_weight = weight(max->demand);
     std::vector<double> weights(size - 1, 0);
     for (size_t i = 1; i < size; ++i) {
-        int c_demand = volume(prob.customers[i].demand);
-        weights[i-1] = (c_demand / max_demand)
+        weights[i-1] =
+            (divide(volume(prob.customers[i].demand), max_volume)
+            + divide(weight(prob.customers[i].demand), max_weight))
             + (depot_costs[i] / max_cost);
     }
     return weights;
