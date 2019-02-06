@@ -339,6 +339,18 @@ std::vector<size_t> select_seeds(const Heuristic& h,
     return seeds;
 }
 
+template<typename T>
+using mat_t = std::vector<std::vector<T>>;
+
+template<typename T, typename ListIt>
+T sum_route_part(const mat_t<T>& mat, ListIt first, ListIt last) {
+    T sum = static_cast<T>(0);
+    for (auto first2 = std::next(first, 1); first2 != last; ++first, ++first2) {
+        sum += mat[*first][*first2];
+    }
+    return sum;
+}
+
 std::vector<Solution> construct_solutions(const Heuristic& h, size_t count) {
     count = 1;  // TODO: add randomness
     std::vector<Solution> solutions(count);
@@ -376,8 +388,17 @@ std::vector<Solution> construct_solutions(const Heuristic& h, size_t count) {
                     std::list<double> ratings_c2{};
                     for (auto i = route.cbegin(), j = std::next(i, 1);
                         j != route.cend(); ++i, ++j) {
-                        auto route_dist = prob.costs[*i][c] + prob.costs[c][*j];
-                        auto route_time = prob.times[*i][c] + prob.times[c][*j];
+                        // calculate total route distance with `c` included:
+                        // 0->i + (i->c + c->j) + j->0
+                        auto route_dist = prob.costs[*i][c] + prob.costs[c][*j]
+                            + sum_route_part(prob.costs, route.cbegin(), j)
+                            + sum_route_part(prob.costs, j, route.cend());
+                        // calculate total route time with `c` included:
+                        // 0->i + (i->c + c->j) + j->0
+                        auto route_time = prob.times[*i][c] + prob.times[c][*j]
+                            + sum_route_part(prob.times, route.cbegin(), j)
+                            + sum_route_part(prob.times, j, route.cend());
+                        // total distance + total time:
                         ratings_c2.emplace_back(
                             beta_1*route_dist + beta_2*route_time);
                     }
