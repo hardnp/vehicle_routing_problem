@@ -270,7 +270,8 @@ public:
         }
         m_model.remove(m_objective);
         m_objective = IloMinimize(m_env,
-            IloExpr(insertion_costs + IloMax(m_capacity_fractions)));
+            IloExpr(insertion_costs / total_distance
+                    + IloMax(m_capacity_fractions)));
         m_model.add(m_objective);
     }
 };
