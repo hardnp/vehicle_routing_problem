@@ -3,6 +3,7 @@
 #include <map>
 #include <tuple>
 #include <iostream>
+#include <array>
 
 namespace vrp {
 namespace detail {
@@ -17,10 +18,28 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 	std::vector<std::pair<size_t, std::vector<size_t>>> routes;
     routes.reserve(cust_size);
 
+    // visited customers
+    std::vector<int> dest(points, 0);
+    dest[0] = 1;
+
+    // started from customers
+    std::vector<int> src(points, 0);
+    src[0] = 1;
+
+    // backward edges
+    std::vector<int> back_ed(points, 0);
+
     // start initialisation
-	for (unsigned int i = 0; i < cust_size; ++i) {
+    std::cout << "INIT ROUTES" << std::endl;
+	for (unsigned int i = 0; i < points; ++i) {
 		routes.push_back({ i, {0, i, 0} });
 	}
+
+    // customer id <-> its root
+    std::vector<size_t> cust_root_matcher(points, 0);
+    for (unsigned int i = 1; i < points; ++i) {
+        cust_root_matcher[i] = i;
+    }
 
     // saving for i and j vertices
 	struct S {
@@ -31,7 +50,6 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 
 	std::vector<S> save(points * points, {0, 0, 0});
 
-
     // calculating matrix(vector) of savings
 	for (unsigned int i = 0; i < points; ++i) {
 		for (unsigned int j = 0; j < points; ++j) {
@@ -39,113 +57,118 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 		}
 	}
 
-    //DEBUGGING @DELETE ME@
-    std::cout << "savings";
-    for (unsigned int i = 0; i < points; ++i) {
-        std::cout << std::endl;
-        for (unsigned int j = 0; j < points; ++j) {
-            std::cout << save[i * points + j].save_ij << ' ';
-        }
-    }
-
+    // sort and erase nonreq savings
 	std::sort(save.begin(), save.end(), [](const S & a, const S & b) {return a.save_ij < b.save_ij; });
-
-    //DEBUGGING @DELETE ME@
-    std::cout << std::endl << "SORTED SAVINGS" << std::endl;
-    for (auto a:save) {
-        std::cout << a.save_ij << ' ';
-    }
-
     save.erase( std::remove_if(save.begin(), save.end(),
-            [](const auto & o) { return o.i == o.j; }), save.end());
+            [](const auto & o) { return (o.i == o.j || o.i == 0 || o.j == 0); }), save.end());
 
     //DEBUGGING @DELETE ME@
-    std::cout << std::endl << "REMOVED SAVINGS I J" << std::endl;
+    std::cout << std::endl << "SAVINGS I J" << std::endl;
     for (auto a : save) {
-        std::cout << a.save_ij << ' ';
+        std::cout << "saving " << a.i << " to " << a.j << " with save " << a.save_ij << std::endl;
     }
     std::cout << std::endl;
-
-	const int REGULATOR = std::min((size_t)3, save.size()); // check 3 best savings
 
 	// times for customer
 	struct Time {
 		unsigned int start;
 		unsigned int finish;
+        unsigned int current;
 	};
 
     // customer id <-> hard tw
     std::map<size_t, Time> times;
 
-    // DELETE ME
-    std::cout << "TIMES (id start finish)" << std::endl;
+    // DELETE ME (cout)
+    std::cout << "TIMES (id start finish current)" << std::endl;
 	for (auto i = 0; i < cust_size; ++i) {
-		times[prob.customers[i].id] = {(unsigned int)prob.customers[i].hard_tw.first, (unsigned int)prob.customers[i].hard_tw.second};
-        std::cout << prob.customers[i].id << ' ' << times[prob.customers[i].id].start << ' ' << times[prob.customers[i].id].finish << std::endl;
+		times[prob.customers[i].id] = {(unsigned int)prob.customers[i].hard_tw.first, (unsigned int)prob.customers[i].hard_tw.second,
+        std::min((unsigned int)prob.customers[i].hard_tw.first, (unsigned int)prob.times[0][prob.customers[i].id])};
+        std::cout << prob.customers[i].id << ' ' << times[prob.customers[i].id].start << ' ' << times[prob.customers[i].id].finish << ' ' <<
+            times[prob.customers[i].id].current <<  std::endl;
 	}
 
     std::vector<S> fine;
-    //tmp variant. just 1 iteration
     int kk = 0;
-	while (kk==0) { // main cycle
-        kk = 1;
-		for (int r = 0; r < REGULATOR; ++r) {
-            // current best saving (one of r)
-            auto best_save = save[save.size() - 1 - r];
+    std::cout << "START" << std::endl;
+	while (kk < save.size()) { // main cycle
+            auto best_save = save[save.size() - 1 - kk++];
+            //std::cout << "considering save " << best_save.i << " to " << best_save.j << " with save " << best_save.save_ij << std::endl;
 
-            int time_diff = times[best_save.j].start - times[best_save.i].finish
-                - prob.times[best_save.j][best_save.i];
-			if (time_diff >= 0) {
-				// fine
+            // cust is not visited yet
+            if (!src[best_save.i] && !dest[best_save.j] && (best_save.j != best_save.i) &&
+                !(back_ed[best_save.i] == best_save.j)) {
 
-                std::cout << "going form i = " << best_save.i << " to j = "<< best_save.j << std::endl;
+                // handle routes & machines
+                //std::cout << "GOOD EDGE TO LOOK AT " << best_save.i << " to " << best_save.j << " with save " << best_save.save_ij << std::endl;
+                //fine.push_back(best_save);
 
-                std::cout <<  "j start: " << times[best_save.j].start << std::endl << "i finish: " << times[best_save.i].finish
-                    << std::endl << "with time between: " << prob.times[best_save.j][best_save.i] << std::endl;
+                int time_diff = times[best_save.j].current - times[best_save.i].current
+                    - prob.times[best_save.i][best_save.j];
+                if (time_diff >= 0) {
+                    // fine
 
-				fine.push_back(best_save);
-			} else {
-				int offset = times[best_save.i].finish
-				             + prob.times[best_save.j][best_save.i] - times[best_save.j].start;
-				// check the rest of root with offset
-                std::cout << "offset "<< offset << std::endl;
-                // offset is ok for j-route
-                int flag = 0;
-                // the ugliest multi-loop in the world //PLS KILL ME
-                //
-                //
-                //RESOLVE 3 best routes possible - pick one according to cap/time
-                //
-                for (auto route : routes) {
-                    for (auto cust : route.second) {
-                        if (cust == best_save.j) {
-                            // ckeck offset for that j-route
-                            for (auto cust : route.second) {
-                                if (times[cust].start + offset > times[cust].finish) {
-                                    flag = 1;
-                                    break;
-                                }
+                    std::cout << "EASY INSERT going from i = " << best_save.i << " to j = " << best_save.j << std::endl;
+                    fine.push_back(best_save);
+                    dest[best_save.j] = 1;
+                    src[best_save.i] = 1;
+                    back_ed[best_save.j] = best_save.i;
+                    times[best_save.j].current = times[best_save.i].current
+                        + prob.times[best_save.i][best_save.j];
+                    routes[best_save.i].second.insert(routes[best_save.i].second.end()-2, best_save.j);
+                }
+                else {
+                    int offset = times[best_save.i].current
+                        + prob.times[best_save.i][best_save.j] - times[best_save.j].current;
+                    // check the rest of root with offset
+                    //std::cout << "offset of going from i = " << best_save.i << " to j = " << best_save.j << " with offset " << offset << std::endl;
+                    // offset is ok for j-route
+                    int flag = 0;
+                    //std::cout << "j root of "<< best_save.j << std::endl;
+                    auto j_route = routes[best_save.j];
+
+                    // ckeck offset for that j-route
+                    for (auto cust : j_route.second) {
+                        if (cust!= 0 && (times[cust].current + offset > times[cust].finish)) {
+                            flag = 1;
+                            break;
+                        }
+                    }
+
+                    if (!flag) {
+                        std::cout << "TOUGH INSERT going from i = " << best_save.i << " to j = " << best_save.j << std::endl;
+                        dest[best_save.j] = 1;
+                        src[best_save.i] = 1;
+                        back_ed[best_save.j] = best_save.i;
+                        fine.push_back(best_save);
+                        for (auto cust : j_route.second) {
+                            if (cust != 0) {
+                                times[cust].current += offset;
+                                cust_root_matcher[cust] = best_save.j;
+                                routes[best_save.i].second.insert(routes[best_save.i].second.end() - 2, cust);
                             }
-                            goto exit;
                         }
                     }
                 }
-            exit:
-            // offest is OK
-                if (!flag) {
-                    fine.push_back(best_save);
-                }
-			}
-		}
-        for (auto s : fine) {
-            std::cout << "add edge for i to j with save" << std::endl;
-            std::cout << s.i << ' ' << s.j << ' ' << s.save_ij << std::endl;
-        }
+                /*for (auto a : times) {
+                    std::cout << a.first << " with current " << a.second.current << std::endl;
+                }*/
+            }
         // TODO:
         // 1) check capacity
-        // 2) calculate new times if cap is ok
-		// 3) somehow remove i-j route
+		// 2) somehow manage redundant j route
 	}
+    std::cout << "Added edges" << std::endl;
+    for (auto & a : fine)
+        std::cout << a.i << " to " << a.j << " with save " << a.save_ij << std::endl;
+
+    std::cout << std::endl<<"final routes (except 3-length ones)" << std::endl;
+    for (auto a : routes) {
+        for (auto b : a.second) {
+            std::cout << b << ' ';
+        }
+        std::cout<<std::endl;
+    }
     // after all
     // put here all the solution staff
 
