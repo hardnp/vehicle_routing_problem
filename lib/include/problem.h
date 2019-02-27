@@ -7,14 +7,107 @@
 #include <cstdint>
 #include <limits>
 #include <vector>
+#include <list>
+#include <unordered_map>
 
 namespace vrp {
 /// Vehicle Routing Problem representation
 class Problem {
+public:
+    struct VehicleType {
+        std::vector<bool> avail_customers;  ///< customers covered by the type
+        std::vector<bool> avail_vehicles;   ///< vehicles included in the type
+        std::vector<size_t> customers;  ///< customers included in the type
+        std::vector<size_t> vehicles;   ///< vehicles included in the type
+    };
+
+private:
     std::vector<std::vector<bool>> m_allowed_vehicles;  ///< allowed vehicles
                                                         /// for each customer:
                                                         /// true means allowed,
                                                         /// false otherwise
+    std::vector<VehicleType> m_vehicle_types;   ///< vehicle types. size_t value
+                                                /// is the vehicle index
+
+    template<typename IntegerT>
+    std::vector<size_t> to_vector(const std::list<IntegerT>& l) {
+        std::vector<size_t> v;
+        v.reserve(l.size());
+        for (const auto& e : l) v.emplace_back(e);
+        return v;
+    }
+
+    std::vector<VehicleType> create_vehicle_types() {
+        const auto vehicles_size = this->n_vehicles();
+        // suitable customers per vehicle
+        std::unordered_map<int, std::list<size_t>> suitable_customers = {};
+        suitable_customers.reserve(vehicles_size);
+        for (const auto& customer : this->customers) {
+            int c = customer.id;
+            const auto& suitable = customer.suitable_vehicles;
+            if (suitable.size() == 0) {
+                // if suitable is empty, consider this as "all inclusive"
+                // customer: any vehicle can deliver to it
+                for (const auto& v : vehicles) {
+                    suitable_customers[v.id].emplace_back(c);
+                }
+            } else {
+                // if t is in suitable vehicles, t is allowed for current
+                // customer
+                for (int v : suitable) {
+                    suitable_customers[v].emplace_back(c);
+                }
+            }
+        }
+        std::list<int> untyped = {};
+        for (size_t i = 0; i < vehicles_size; ++i) {
+            untyped.emplace_back(static_cast<int>(i));
+        }
+        std::list<std::list<int>> vehicle_groups = {};
+        while (!untyped.empty()) {
+            int v = untyped.back();
+            untyped.pop_back();
+            const auto& customers = suitable_customers[v];
+            bool found_existing_group = false;
+            for (auto& g : vehicle_groups) {
+                if (g.empty()) continue;
+                if (customers == suitable_customers[g.front()]) {
+                    g.emplace_back(v);
+                    found_existing_group = true;
+                }
+            }
+            if (!found_existing_group) {
+                // create new group if there's no existing that matches v
+                vehicle_groups.emplace_back(std::list<int>{v});
+            }
+        }
+        const auto customers_size = this->n_customers();
+        std::vector<VehicleType> types = {};
+        types.reserve(vehicle_groups.size());
+        for (const auto& g : vehicle_groups) {
+            types.emplace_back(VehicleType{});
+            VehicleType& type = types.back();
+            const auto& suitable = suitable_customers[g.front()];
+            // populate available customers
+            type.avail_customers.resize(customers_size, false);
+            for (size_t c : suitable)
+                type.avail_customers[c] = true;
+            // populate available vehicles
+            type.avail_vehicles.resize(vehicles_size, false);
+            for (size_t v : g)
+                type.avail_vehicles[v] = true;
+            // populate customers
+            type.customers.reserve(suitable.size());
+            for (size_t c : suitable)
+                type.customers.emplace_back(c);
+            // populate vehicles
+            type.vehicles.reserve(g.size());
+            for (size_t v : g)
+                type.vehicles.emplace_back(v);
+        }
+        return types;
+    }
+
 public:
     std::vector<std::vector<double>> costs = {};    ///< cost matrix
     std::vector<Customer> customers = {};   ///< customer list
@@ -26,6 +119,9 @@ public:
 
     // TODO: should be part of ctor
     void set_up() {
+        m_vehicle_types = create_vehicle_types();
+
+        // TODO: get rid of this:
         // Set up allowed vehicles
         const auto customers_size = n_customers();
         m_allowed_vehicles.resize(customers_size, {});
@@ -60,6 +156,9 @@ public:
     inline const std::vector<bool>& allowed_vehicles(size_t customer) const {
         return m_allowed_vehicles[customer];
     }
-
+    /// Get vehicle types for current problem
+    inline const std::vector<VehicleType> vehicle_types() const {
+        return m_vehicle_types;
+    }
 };
 }  // vrp
