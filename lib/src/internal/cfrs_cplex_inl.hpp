@@ -76,6 +76,8 @@ class Heuristic {
     IloCplex m_algo = IloCplex(m_model);
     IloObjective m_objective;
     IloExprArray m_capacity_fractions;
+    double m_alpha_v = 0.5, m_alpha_w = 0.5;    ///< volume/weight coefficients
+                                                /// to balance zeroed values
 
     inline void add_zero_constraint(size_t i, IloInt t) {
         IloExpr zero_expr(m_env);
@@ -93,7 +95,6 @@ class Heuristic {
         return ::vrp::detail::assignment_cost(m_prob, seeds, i);
     }
 
-
 public:
     inline IloEnv& env() { return m_env; }
     inline std::vector<IloIntVarArray>& X() { return m_x; }
@@ -110,11 +111,12 @@ public:
 #endif
 
         const auto n_customers = prob.n_customers();
+        const auto n_vehicles = prob.n_vehicles();
         const auto& types = prob.vehicle_types();
+        const auto types_size = types.size();
 
         for (size_t i = 1; i < n_customers; ++i) {
-            const auto size = types.size();
-            m_x.emplace_back(IloIntVarArray(m_env, size, 0.0, 1.0));
+            m_x.emplace_back(IloIntVarArray(m_env, types_size, 0.0, 1.0));
         }
 
         {
@@ -132,6 +134,37 @@ public:
         }
 
         const auto& V = prob.vehicles;
+
+        // calculate dynamic weights for objective function
+        {
+            // customers:
+            size_t non_zero_volume_customers = 0, non_zero_weight_customers = 0;
+            for (const auto& c : prob.customers) {
+                if (volume(c.demand) != 0) non_zero_volume_customers++;
+                if (weight(c.demand) != 0) non_zero_weight_customers++;
+            }
+
+            // vehicles:
+            size_t non_zero_volume_vehicles = 0, non_zero_weight_vehicles = 0;
+            for (const auto& v : V) {
+                if (volume(v.capacity) != 0) non_zero_volume_vehicles++;
+                if (weight(v.capacity) != 0) non_zero_weight_vehicles++;
+            }
+
+            // alpha'_v = non_zero volumes / all volumes
+            // alpha'_w = non_zero weights / all weights
+            // alpha_v = alpha'_v / (alpha'_v + alpha'_w)
+            // alpha_w = alpha'_w / (alpha'_v + alpha'_w)
+            double alpha_prime_v = 0.0, alpha_prime_w = 0.0;
+            alpha_prime_v = 0.5 * (non_zero_volume_customers / n_customers
+                + non_zero_volume_vehicles / n_vehicles);
+            alpha_prime_w = 0.5 * (non_zero_weight_customers / n_customers
+                + non_zero_weight_vehicles / n_vehicles);
+            double sum = alpha_prime_v + alpha_prime_w;
+            m_alpha_v = alpha_prime_v / sum;
+            m_alpha_w = alpha_prime_w / sum;
+        }
+
         {
             // Note: double constraints due to volume && weight
             // (1)
@@ -175,12 +208,15 @@ public:
 
                 // total = volume + weight
                 if (total_volume == 0) {
-                    capacity_fractions.add(weight_fraction / total_weight);
+                    capacity_fractions.add(
+                        m_alpha_w * weight_fraction / total_weight);
                 } else if (total_weight == 0) {
-                    capacity_fractions.add(volume_fraction / total_volume);
+                    capacity_fractions.add(
+                        m_alpha_v * volume_fraction / total_volume);
                 } else {
-                    capacity_fractions.add(weight_fraction / total_weight
-                        + volume_fraction / total_volume);
+                    capacity_fractions.add(
+                        m_alpha_w * weight_fraction / total_weight +
+                        m_alpha_v * volume_fraction / total_volume);
                 }
             }
             m_capacity_fractions = capacity_fractions;
