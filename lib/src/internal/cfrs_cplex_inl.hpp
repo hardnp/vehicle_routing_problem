@@ -274,17 +274,33 @@ public:
         return vals;
     }
 
-    void update_with_seeds(const std::vector<size_t>& seeds) {
+    /// Get mapping between customer and vehicle type for current solution
+    std::unordered_map<size_t, size_t> get_customer_types(
+        size_t depot_offset = 0) {
+        auto assignment_map = this->get_values();
+        std::unordered_map<size_t, size_t> mapped_types;
+        for (size_t c = 0; c < assignment_map.size(); ++c) {
+            const auto& types = assignment_map[c];
+            auto chosen_type = std::find(types.cbegin(), types.cend(), 1.0);
+            size_t t = std::distance(types.cbegin(), chosen_type);
+            mapped_types[c + depot_offset] = t;
+        }
+        return mapped_types;
+    }
+
+    void update_with_seeds(
+        const std::unordered_map<size_t, std::vector<size_t>>& seeds) {
         const auto n_customers = m_prob.n_customers();
+        auto customer_to_type = this->get_customer_types();
+
         // (9) calculate total minimal insertion cost
         double total_distance = 0.0;
         for (size_t k = 1; k < n_customers; ++k) {
-            const auto& allowed = m_prob.allowed_vehicles(k);
-            // TODO: fix this
-            assert(allowed.size() == seeds.size());
+            const auto& allowed = m_prob.allowed_types(k);
             for (size_t t = 0; t < allowed.size(); ++t) {
                 if (allowed[t]) {
-                    total_distance += assignment_cost(seeds[t], k);
+                    total_distance += assignment_cost(
+                        seeds.at(customer_to_type[t]), k);
                 }
             }
         }
@@ -293,9 +309,12 @@ public:
         IloExpr insertion_costs(m_env);
         for (size_t i = 1; i < n_customers; ++i) {
             const auto& array = m_x[i-1];
+
+            // this must hold true because we operate on types:
             assert(static_cast<size_t>(array.getSize()) == seeds.size());
+
             for (IloInt t = 0; t < array.getSize(); ++t) {
-                insertion_costs += assignment_cost(seeds[t], i) * array[t];
+                insertion_costs += assignment_cost(seeds.at(t), i) * array[t];
             }
         }
         m_model.remove(m_objective);
@@ -324,9 +343,9 @@ std::vector<double> calculate_weights(const Problem& prob) {
             return a.demand < b.demand; });
     const auto max_volume = volume(max->demand);
     const auto max_weight = weight(max->demand);
-    std::vector<double> weights(size - 1, 0);
+    std::vector<double> weights(size, 0.0);
     for (size_t i = 1; i < size; ++i) {
-        weights[i-1] =
+        weights[i] =
             (divide(volume(prob.customers[i].demand), max_volume)
             + divide(weight(prob.customers[i].demand), max_weight))
             + (depot_costs[i] / max_cost);
@@ -340,12 +359,10 @@ std::unordered_map<size_t, std::list<size_t>> group(const Heuristic& h,
     auto assignment_map = h.get_values();
     std::unordered_map<size_t, std::list<size_t>> routes;
     for (size_t c = 0; c < assignment_map.size(); ++c) {
-        const auto& types_for_customer = assignment_map[c];
-        auto chosen_vehicle_type = std::find(types_for_customer.cbegin(),
-            types_for_customer.cend(), 1.0);
-        size_t chosen_vehicle_type_index = std::distance(
-            types_for_customer.cbegin(), chosen_vehicle_type);
-        routes[chosen_vehicle_type_index].emplace_back(c + depot_offset);
+        const auto& types = assignment_map[c];
+        auto chosen_type = std::find(types.cbegin(), types.cend(), 1.0);
+        size_t t = std::distance(types.cbegin(), chosen_type);
+        routes[t].emplace_back(c + depot_offset);
     }
     return routes;
 }
@@ -365,22 +382,23 @@ T sum_route_part(const mat_t<T>& mat, ListIt first, ListIt last) {
 #define EXPERIMENTAL 1
 
 /// Solve basic (capacitated) VRP (CVRP) with insertion heuristic
-std::vector<std::pair<size_t, std::list<size_t>>>
+std::vector<std::tuple<size_t, size_t, std::list<size_t>>>
 solve_cvrp(const Heuristic& h) {
     // depot_offset = 1 due to depot at index 0:
     auto typed_customers = group(h, 1);
     const auto& prob = h.prob();
     static constexpr const size_t depot = 0;
-    // std::unordered_map<size_t, size_t> vehicle_to_type = {};
-    // vehicle_to_type.reserve(prob.n_vehicles());
-    std::unordered_map<size_t, std::list<size_t>> routes = {};
+    std::unordered_map<size_t, std::list<size_t>> routes{};
+    std::unordered_map<size_t, size_t> vehicle_to_type{};
     // perform allocations:
-    routes.reserve(prob.n_vehicles());  // allocate for max number of vehicles
+    const auto n_vehicles = prob.n_vehicles();
+    routes.reserve(n_vehicles);  // allocate for max number of vehicles
+    vehicle_to_type.reserve(n_vehicles);
     const auto& all_types = prob.vehicle_types();
     for (const auto& pair : typed_customers) {
         for (size_t v : all_types[pair.first].vehicles) {
-            // vehicle_to_type[v] = pair.first;
             routes[v] = {};
+            vehicle_to_type[v] = pair.first;
         }
     }
 
@@ -388,9 +406,10 @@ solve_cvrp(const Heuristic& h) {
     // params of c2:
     static constexpr const double beta_1 = 0.5, beta_2 = 0.5;
     for (auto& type_and_customers : typed_customers) {
+        auto t = type_and_customers.first;
         auto unrouted = type_and_customers.second;
         // TODO: sort vehicles by some criterion (e.g. capacity/cost efficiency)
-        const auto& vehicles = all_types[type_and_customers.first].vehicles;
+        const auto& vehicles = all_types[t].vehicles;
         bool last_vehicle = false;
         for (size_t i = 0; i < vehicles.size(); ++i) {
             // FIXME: push everything in the last vehicle - no choice (?)
@@ -471,112 +490,88 @@ solve_cvrp(const Heuristic& h) {
 
     // return only real routes (if route consists of <= 2 nodes, it's actually
     // empty - "size 2" stands for in-depot and out-depot)
-    std::vector<std::pair<size_t, std::list<size_t>>> cleaned_routes = {};
+    std::vector<std::tuple<size_t, size_t, std::list<size_t>>> cleaned_routes{};
     cleaned_routes.reserve(routes.size());
     for (auto& vehicle_and_route : routes) {
         if (vehicle_and_route.second.size() > 2) {
-            cleaned_routes.emplace_back(std::move(vehicle_and_route));
+            const auto v = vehicle_and_route.first;
+            cleaned_routes.emplace_back(vehicle_to_type[v], v,
+                std::move(vehicle_and_route.second));
         }
     }
 
     return cleaned_routes;
 }
 
+std::vector<std::pair<size_t, std::list<size_t>>>
+routes_to_sln(std::vector<std::tuple<size_t, size_t, std::list<size_t>>> routes)
+{
+    std::vector<std::pair<size_t, std::list<size_t>>> converted{};
+    converted.reserve(routes.size());
+    for (auto& values : routes) {
+        converted.emplace_back(std::get<1>(values),
+            std::move(std::get<2>(values)));
+    }
+    return converted;
+}
+
 /// Select seeds for each route
-std::vector<size_t> select_seeds(const Heuristic& h,
-    const std::vector<double>& weights) {
-    // TODO: handle case when seeds.size() != number of vehicles
+std::unordered_map<size_t, std::vector<size_t>> select_seeds(const Heuristic& h)
+{
+    const auto& prob = h.prob();
+    auto weights = calculate_weights(prob);
 
     // the customer on the route with the largest seed weight becomes the seed
     // point of the route
     auto routes = solve_cvrp(h);
-    std::vector<size_t> seeds{};
-    seeds.reserve(routes.size());
-    for (const auto& vehicle_route : routes) {
-        const auto& route = vehicle_route.second;
-        auto seed_customer = *std::max_element(route.cbegin(), route.cend(),
-            [&weights] (size_t a, size_t b) {
-                return weights[a] < weights[b]; });
-        seeds.emplace_back(seed_customer + 1); // Note: +1 due to depot
+    // TODO: in fact, we don't need routes...
+    for (auto& vehicle_route : routes) {
+        auto& route = std::get<2>(vehicle_route);
+        route.sort([&weights] (size_t i, size_t j) {
+            return weights[i] > weights[j];
+        });
     }
+    // sort all routes to put bigger in the beginning
+    std::sort(routes.begin(), routes.end(), [] (const auto& a, const auto& b) {
+        return std::get<2>(a).size() > std::get<2>(b).size();
+    });
+
+    const auto size = prob.n_vehicles();
+    unordered_map<size_t, std::vector<size_t>> seeds{};
+
+    std::unordered_map<size_t, uint32_t> number_of_seeds_per_route = {};
+    number_of_seeds_per_route.reserve(size);
+    for (size_t v = 0; v < size; ++v) {
+        size_t route_index = v % routes.size();
+        const auto* route = &std::get<2>(routes[route_index]);
+        size_t node_index = number_of_seeds_per_route[route_index];
+        // skip "exhausted" routes:
+        size_t v_next = v;
+        while (route->size() <= node_index + 2) {
+            v_next++;
+            route_index = v_next % routes.size();
+            route = &std::get<2>(routes[route_index]);
+            node_index = number_of_seeds_per_route[route_index];
+        }
+        const auto type = std::get<0>(routes[route_index]);
+        seeds[type].reserve(size);
+        seeds[type].emplace_back(*std::next(route->cbegin(), node_index));
+        number_of_seeds_per_route[route_index]++;
+    }
+
+    // this must hold due to algorithm: seeds size == number of vehicles
+    assert(std::accumulate(seeds.cbegin(), seeds.cend(), size_t(0),
+        [] (size_t sum, const auto& s) -> size_t {
+            return sum + s.second.size(); }) == size);
+
     return seeds;
 }
 
 std::vector<Solution> construct_solutions(const Heuristic& h, size_t count) {
     count = 1;  // TODO: add randomness
     std::vector<Solution> solutions(count);
-#if 0
-    // depot_offset = 1 due to depot at index 0. this is important here:
-    auto routes = group(h, 1);
-    // perform allocations:
-    for (size_t i = 0; i < count; ++i) {
-        solutions[i].routes.reserve(routes.size());
-        for (const auto& pair : routes) {
-            solutions[i].routes.emplace_back(std::make_pair(pair.first,
-                std::list<size_t>{}));
-        }
-    }
-    const auto& prob = h.prob();
-    static constexpr const size_t depot = 0;
-    // insertion heuristic, variation 2: c1 is not needed (?), c2 is minimized.
-    // params of c2:
-    static constexpr const double beta_1 = 0.5, beta_2 = 0.5;
-#endif
     for (auto& sln : solutions) {
-        sln.routes = std::move(solve_cvrp(h));
-#if 0
-        for (auto& vehicle_route : sln.routes) {
-            // init
-            auto& route = vehicle_route.second;
-            route.emplace_front(depot);
-            route.emplace_back(depot);
-            auto unrouted = routes[vehicle_route.first];
-            while (!unrouted.empty()) {
-                // as route has a fixed cost/time outside of u "region", we can
-                // simply calculate c2(i, u, j) as for route xx-i-u-j-xx without
-                // adding xx nodes
-
-                // format: customer_id, c2 value, best insertion position
-                using opt_data_t = std::tuple<size_t, double, size_t>;
-                std::list<opt_data_t> optimal_c2{};
-                for (const auto& c : unrouted) {
-                    std::list<double> ratings_c2{};
-                    for (auto i = route.cbegin(), j = std::next(i, 1);
-                        j != route.cend(); ++i, ++j) {
-                        // calculate total route distance with `c` included:
-                        // 0->i + (i->c + c->j) + j->0
-                        auto route_dist = prob.costs[*i][c] + prob.costs[c][*j]
-                            + sum_route_part(prob.costs, route.cbegin(), j)
-                            + sum_route_part(prob.costs, j, route.cend());
-                        // calculate total route time with `c` included:
-                        // 0->i + (i->c + c->j) + j->0
-                        auto route_time = prob.times[*i][c] + prob.times[c][*j]
-                            + sum_route_part(prob.times, route.cbegin(), j)
-                            + sum_route_part(prob.times, j, route.cend());
-                        // total distance + total time:
-                        ratings_c2.emplace_back(
-                            beta_1*route_dist + beta_2*route_time);
-                    }
-                    auto min = std::min_element(ratings_c2.cbegin(),
-                        ratings_c2.cend());
-                    // Note: (distance + 1) to relate to actual route's start at
-                    // depot. otherwise, we'd insert before depot
-                    optimal_c2.emplace_back(std::make_tuple(
-                        c, *min, std::distance(ratings_c2.cbegin(), min) + 1));
-                }
-
-                // find optimal customer and update route
-                auto optimal = *std::min_element(
-                    optimal_c2.cbegin(), optimal_c2.cend(),
-                    [] (const opt_data_t& a, const opt_data_t& b) {
-                        return std::get<1>(a) < std::get<1>(b);});
-                const auto& c = std::get<0>(optimal);
-                unrouted.remove(c);
-                route.insert(
-                    std::next(route.cbegin(), std::get<2>(optimal)), c);
-            }
-        }
-#endif
+        sln.routes = std::move(routes_to_sln(solve_cvrp(h)));
     }
     return solutions;
 }
@@ -590,8 +585,7 @@ std::vector<Solution> cfrs_impl(const Problem& prob, size_t count) {
     // there's exactly one route. since we don't really care about actual route
     // construction right now, only about route seeds, we can skip route
     // construction and start updating heuristic right away
-    auto weights = calculate_weights(prob);
-    auto seeds = select_seeds(h, weights);
+    auto seeds = select_seeds(h);
     h.update_with_seeds(seeds);
     h.solve();
     LOG_INFO << "Objective = " << h.algo().getObjValue() << EOL;

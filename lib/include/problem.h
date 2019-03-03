@@ -28,6 +28,10 @@ private:
                                                         /// false otherwise
     std::vector<VehicleType> m_vehicle_types;   ///< vehicle types. size_t value
                                                 /// is the vehicle index
+    std::vector<std::vector<bool>> m_allowed_types; ///< allowed types
+                                                    /// for each customer:
+                                                    /// true means allowed,
+                                                    /// false otherwise
 
     template<typename IntegerT>
     std::vector<size_t> to_vector(const std::list<IntegerT>& l) {
@@ -121,9 +125,23 @@ public:
     void set_up() {
         m_vehicle_types = create_vehicle_types();
 
-        // TODO: get rid of this:
-        // Set up allowed vehicles
+        // set allowed types
         const auto customers_size = n_customers();
+        const auto types_size = m_vehicle_types.size();
+        m_allowed_types.resize(customers_size, {});
+        for (size_t c = 0; c < customers_size; ++c) {
+            m_allowed_types[c].resize(types_size, false);
+        }
+        for (size_t c = 0; c < customers_size; ++c) {
+            auto& allowed_for_customer = m_allowed_types[c];
+            for (size_t t = 0; t < types_size; ++t) {
+                const auto& type = m_vehicle_types[t];
+                allowed_for_customer[t] = type.avail_customers[c];
+            }
+        }
+
+        // TODO: get rid of this:
+        // set allowed vehicles
         m_allowed_vehicles.resize(customers_size, {});
         for (size_t c = 0; c < customers_size; ++c) {
             const auto& suitable = this->customers[c].suitable_vehicles;
@@ -155,6 +173,10 @@ public:
     /// Get allowed vehicles for customer. Expected `customer` param is 0-based
     inline const std::vector<bool>& allowed_vehicles(size_t customer) const {
         return m_allowed_vehicles[customer];
+    }
+    /// Get allowed types for customer. Expected `customer` param is 0-based
+    inline const std::vector<bool>& allowed_types(size_t customer) const {
+        return m_allowed_types[customer];
     }
     /// Get vehicle types for current problem
     inline const std::vector<VehicleType> vehicle_types() const {
