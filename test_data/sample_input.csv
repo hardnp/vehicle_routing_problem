@@ -1,5 +1,6 @@
 table customer
 id; volume; weight; hard_tw_begin; hard_tw_end; soft_tw_begin; soft_tw_end; service_time; suitable_vehicles
+0; 0; 0; 0; 1000; 0; 1000; 0;
 1; 7; 1; 0;   200; 50;  70;  10;   0; 1; 2
 2; 2; 5; 10;  50;  10;  20;  5;    0; 3
 3; 3; 8; 100; 110; 105; 110; 1;    1
@@ -7,22 +8,24 @@ id; volume; weight; hard_tw_begin; hard_tw_end; soft_tw_begin; soft_tw_end; serv
 
 table vehicle
 id; volume; weight; fixed_cost; variable_cost
-1; 2; 2; 1; 5
-2; 10; 3; 50; 15
-3; 1; 7; 5; 2
-4; 5; 8; 5; 10
+0; 2; 2; 1; 5
+1; 10; 3; 50; 15
+2; 1; 7; 5; 2
+3; 5; 8; 5; 10
 
 table cost
-0; 1; 2; 3
-1; 0; 4; 5
-2; 4; 0; 6
-3; 5; 6; 0
+0; 1; 2; 3; 4
+1; 0; 3; 4; 5
+2; 3; 0; 5; 6
+3; 4; 5; 0; 7
+4; 5; 6; 7; 0
 
 table time
-0; 9; 8; 7
-9; 0; 6; 5
-8; 6; 0; 4
-7; 5; 4; 0
+0; 9; 8; 7; 6
+9; 0; 7; 6; 5
+8; 7; 0; 5; 4
+7; 6; 5; 0; 3
+6; 5; 4; 3; 0
 
 value max_violated_soft_tw
 3
