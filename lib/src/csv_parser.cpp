@@ -100,9 +100,11 @@ Problem CsvParser::load_input() const {
         this->m_delimiter).get();
     problem.max_violated_soft_tw = detail::IntValueParser(content,
         data_ranges.at("max_violated_soft_tw"), 1, this->m_delimiter).get();
+    problem.set_up();
     return problem;
 }
 
+// TODO: verify that this works
 void CsvParser::save_output(const std::string& out_path, const Problem& prb,
     const Solution& sln) const {
 
@@ -113,9 +115,16 @@ void CsvParser::save_output(const std::string& out_path, const Problem& prb,
 
 	char del = ';';
 
+    static const auto at = [] (const auto& list, size_t i) {
+        if (list.size() <= i) {
+            throw std::out_of_range("index out of list's range");
+        }
+        return *std::next(list.begin(), i);
+    };
+
 	// for calculating distance from previous customer
 	auto prev_dist = [&prb](const auto& route, size_t i) {
-		return prb.costs[route.second[i]][route.second[i - 1]]; 
+		return prb.costs[at(route.second, i)][at(route.second, i - 1)];
 	};
 
 	for (size_t i = 0; i < sln.routes.size(); ++i) {
@@ -123,10 +132,10 @@ void CsvParser::save_output(const std::string& out_path, const Problem& prb,
 
 		for (size_t j = 1; j < route.second.size() - 1; ++j) { // assuming the first node is depot
 			double prev_cust_dist = prev_dist(route, j);
-			
+
 			auto veh_id = prb.vehicles[route.first].id;
 			outfile << i << del << veh_id << del
-				<< route.second[j] << del;
+				<< at(route.second, j) << del;
 
 			auto find_veh_id = [&veh_id](const auto& split) { return split.first == veh_id; };
 			// seek for current vehicle in split-delivery
@@ -135,11 +144,16 @@ void CsvParser::save_output(const std::string& out_path, const Problem& prb,
 			outfile << (*times).second;
 
 			outfile << prev_cust_dist
-				<< del << prb.costs[route.second[j]][0] << "\n";
+				<< del << prb.costs[at(route.second, j)][0] << "\n";
 		}
 	}
 
     outfile.close();
+    return;
+}
+
+void CsvParser::print_output(const Solution& sln) const {
+    UNUSED(sln)
     return;
 }
 }  // vrp

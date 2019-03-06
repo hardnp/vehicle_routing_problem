@@ -84,16 +84,16 @@ CustomerTableParser::CustomerTableParser(
     BaseParser(CustomerTableParser::table_name, raw_data, table_section, 3,
         row_length, delimiter, 2) {
     for (const auto& row : this->m_raw_values) {
-        auto vehicles = std::vector<std::string>(row.cbegin() + 7, row.cend());
+        auto vehicles = std::vector<std::string>(row.cbegin() + 8, row.cend());
         std::vector<int> suitable = {};
         suitable.reserve(vehicles.size());
         for (const auto& v : vehicles) suitable.push_back(std::stoi(v));
         this->customers.push_back({
             std::stoi(row[0]),
-            std::stoi(row[1]),
-            std::make_pair(std::stoi(row[2]), std::stoi(row[3])),
-            std::make_pair(std::stoi(row[4]), std::stoi(row[5])),
-            std::stoi(row[6]),
+            TransportationQuantity{std::stoi(row[1]), std::stoi(row[2])},
+            std::make_pair(std::stoi(row[3]), std::stoi(row[4])),
+            std::make_pair(std::stoi(row[5]), std::stoi(row[6])),
+            std::stoi(row[7]),
             suitable
         });
     }
@@ -113,8 +113,7 @@ VehicleTableParser::VehicleTableParser(
     for (const auto& row : this->m_raw_values) {
         this->vehicles.push_back({
             std::stoi(row[0]),
-            std::stoi(row[1]),
-            std::stoi(row[2]),
+            TransportationQuantity{std::stoi(row[1]), std::stoi(row[2])},
             std::stod(row[3]),
             std::stod(row[4])
         });
