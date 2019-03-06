@@ -1,9 +1,11 @@
 #include "csv_parser.h"
 #include "solution.h"
 #include "initial_heuristics.h"
+#include "objective.h"
 
 #include <iostream>
 #include <iterator>
+#include <algorithm>
 
 /// Main entry-point to solver
 int main(int argc, char* argv[]) {
@@ -29,5 +31,15 @@ int main(int argc, char* argv[]) {
             std::make_move_iterator(heuristic_solutions.begin()),
             std::make_move_iterator(heuristic_solutions.end()));
     }
+
+    if (solutions.empty()) {
+        throw std::runtime_error("no solutions found");
+    }
+
+    auto best_sln = std::min_element(solutions.cbegin(), solutions.cend(),
+        [&problem] (const auto& a, const auto& b) {
+            return objective(problem, a) < objective(problem, b); });
+    parser.print_output(*best_sln);
+
     return 0;
 }

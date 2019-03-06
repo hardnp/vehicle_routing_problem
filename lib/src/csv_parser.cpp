@@ -108,4 +108,9 @@ void CsvParser::save_output(const Solution& sln) const {
     UNUSED(sln)
     return;
 }
+
+void CsvParser::print_output(const Solution& sln) const {
+    UNUSED(sln)
+    return;
+}
 }  // vrp
