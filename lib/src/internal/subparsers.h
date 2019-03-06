@@ -4,10 +4,10 @@
 #include "vehicle.h"
 
 #include <cstdint>
-#include <string>
-#include <vector>
-#include <utility>
 #include <limits>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace vrp {
 namespace detail {
@@ -16,11 +16,11 @@ class BaseParser {
 protected:
     std::vector<std::vector<std::string>> m_raw_values = {};
     const char m_delimiter = ';';
+
 public:
-    BaseParser(std::string name,
-        const std::vector<std::string>& raw_data,
-        const std::pair<int, int>& section, int min_section_size,
-        size_t row_length, char delimiter = ';', int section_offset = 0);
+    BaseParser(std::string name, const std::vector<std::string>& raw_data,
+               const std::pair<int, int>& section, int min_section_size,
+               size_t row_length, char delimiter = ';', int section_offset = 0);
 };
 
 /// Customers table parser
@@ -34,12 +34,13 @@ public:
  */
 class CustomerTableParser : public BaseParser {
     std::vector<Customer> customers = {};
+
 public:
     static constexpr char table_name[] = "customer";
 
     CustomerTableParser(const std::vector<std::string>& raw_data,
-        const std::pair<int, int>& table_section, size_t row_length,
-        char delimiter = ';');
+                        const std::pair<int, int>& table_section,
+                        size_t row_length, char delimiter = ';');
 
     std::vector<Customer> get() const;
 };
@@ -54,12 +55,13 @@ public:
  */
 class VehicleTableParser : public BaseParser {
     std::vector<Vehicle> vehicles = {};
+
 public:
     static constexpr char table_name[] = "vehicle";
 
     VehicleTableParser(const std::vector<std::string>& raw_data,
-        const std::pair<int, int>& table_section, size_t row_length,
-        char delimiter = ';');
+                       const std::pair<int, int>& table_section,
+                       size_t row_length, char delimiter = ';');
 
     std::vector<Vehicle> get() const;
 };
@@ -73,12 +75,13 @@ public:
  */
 class CostTableParser : public BaseParser {
     std::vector<std::vector<double>> costs = {};
+
 public:
     static constexpr char table_name[] = "cost";
 
     CostTableParser(const std::vector<std::string>& raw_data,
-        const std::pair<int, int>& table_section, size_t row_length,
-        char delimiter = ';');
+                    const std::pair<int, int>& table_section, size_t row_length,
+                    char delimiter = ';');
 
     std::vector<std::vector<double>> get() const;
 };
@@ -92,12 +95,13 @@ public:
  */
 class TimeTableParser : public BaseParser {
     std::vector<std::vector<int>> times = {};
+
 public:
     static constexpr char table_name[] = "time";
 
     TimeTableParser(const std::vector<std::string>& raw_data,
-        const std::pair<int, int>& table_section, size_t row_length,
-        char delimiter = ';');
+                    const std::pair<int, int>& table_section, size_t row_length,
+                    char delimiter = ';');
 
     std::vector<std::vector<int>> get() const;
 };
@@ -111,12 +115,13 @@ public:
  */
 class IntValueParser : public BaseParser {
     int value = std::numeric_limits<int>::max();
+
 public:
     IntValueParser(const std::vector<std::string>& raw_data,
-        const std::pair<int, int>& value_section, size_t row_length,
-        char delimiter = ';');
+                   const std::pair<int, int>& value_section, size_t row_length,
+                   char delimiter = ';');
 
     int get() const;
 };
-}  // detail
-}  // vrp
+}  // namespace detail
+}  // namespace vrp

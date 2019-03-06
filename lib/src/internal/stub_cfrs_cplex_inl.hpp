@@ -8,5 +8,5 @@ std::vector<Solution> cfrs_impl(const Problem& prob, size_t count) {
     return {};
 }
 
-}  // detail
-}  // vrp
+}  // namespace detail
+}  // namespace vrp

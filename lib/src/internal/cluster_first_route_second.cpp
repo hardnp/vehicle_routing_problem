@@ -10,8 +10,8 @@ namespace vrp {
 namespace detail {
 
 std::vector<Solution> cluster_first_route_second(const Problem& prob,
-    size_t count) {
+                                                 size_t count) {
     return cfrs_impl(prob, count);
 }
-}  // detail
-}  // vrp
+}  // namespace detail
+}  // namespace vrp

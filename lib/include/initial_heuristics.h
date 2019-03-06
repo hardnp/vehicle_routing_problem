@@ -1,7 +1,7 @@
 #pragma once
 
-#include "solution.h"
 #include "problem.h"
+#include "solution.h"
 
 #include <cstdint>
 #include <vector>
@@ -18,6 +18,7 @@ enum class InitialHeuristic : int8_t {
 
 /// Create multiple initial solutions with specified heuristic
 std::vector<Solution> create_initial_solutions(const Problem& prob,
-    InitialHeuristic heuristic, size_t count = 1);
+                                               InitialHeuristic heuristic,
+                                               size_t count = 1);
 
-}  // vrp
+}  // namespace vrp
