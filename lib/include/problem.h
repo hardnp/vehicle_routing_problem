@@ -1,14 +1,14 @@
 #pragma once
 
-#include "vehicle.h"
 #include "customer.h"
+#include "vehicle.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <limits>
-#include <vector>
 #include <list>
 #include <unordered_map>
+#include <vector>
 
 namespace vrp {
 /// Vehicle Routing Problem representation
@@ -17,8 +17,8 @@ public:
     struct VehicleType {
         std::vector<bool> avail_customers;  ///< customers covered by the type
         std::vector<bool> avail_vehicles;   ///< vehicles included in the type
-        std::vector<size_t> customers;  ///< customers included in the type
-        std::vector<size_t> vehicles;   ///< vehicles included in the type
+        std::vector<size_t> customers;      ///< customers included in the type
+        std::vector<size_t> vehicles;       ///< vehicles included in the type
     };
 
 private:
@@ -26,14 +26,14 @@ private:
                                                         /// for each customer:
                                                         /// true means allowed,
                                                         /// false otherwise
-    std::vector<VehicleType> m_vehicle_types;   ///< vehicle types. size_t value
-                                                /// is the vehicle index
-    std::vector<std::vector<bool>> m_allowed_types; ///< allowed types
-                                                    /// for each customer:
-                                                    /// true means allowed,
-                                                    /// false otherwise
+    std::vector<VehicleType> m_vehicle_types;  ///< vehicle types. size_t value
+                                               /// is the vehicle index
+    std::vector<std::vector<bool>> m_allowed_types;  ///< allowed types
+                                                     /// for each customer:
+                                                     /// true means allowed,
+                                                     /// false otherwise
 
-    template<typename IntegerT>
+    template <typename IntegerT>
     std::vector<size_t> to_vector(const std::list<IntegerT>& l) {
         std::vector<size_t> v;
         v.reserve(l.size());
@@ -74,7 +74,8 @@ private:
             const auto& customers = suitable_customers[v];
             bool found_existing_group = false;
             for (auto& g : vehicle_groups) {
-                if (g.empty()) continue;
+                if (g.empty())
+                    continue;
                 if (customers == suitable_customers[g.front()]) {
                     g.emplace_back(v);
                     found_existing_group = true;
@@ -94,32 +95,28 @@ private:
             const auto& suitable = suitable_customers[g.front()];
             // populate available customers
             type.avail_customers.resize(customers_size, false);
-            for (size_t c : suitable)
-                type.avail_customers[c] = true;
+            for (size_t c : suitable) type.avail_customers[c] = true;
             // populate available vehicles
             type.avail_vehicles.resize(vehicles_size, false);
-            for (size_t v : g)
-                type.avail_vehicles[v] = true;
+            for (size_t v : g) type.avail_vehicles[v] = true;
             // populate customers
             type.customers.reserve(suitable.size());
-            for (size_t c : suitable)
-                type.customers.emplace_back(c);
+            for (size_t c : suitable) type.customers.emplace_back(c);
             // populate vehicles
             type.vehicles.reserve(g.size());
-            for (size_t v : g)
-                type.vehicles.emplace_back(v);
+            for (size_t v : g) type.vehicles.emplace_back(v);
         }
         return types;
     }
 
 public:
-    std::vector<std::vector<double>> costs = {};    ///< cost matrix
-    std::vector<Customer> customers = {};   ///< customer list
-    std::vector<Vehicle> vehicles = {}; ///< vehicles list
-    std::vector<std::vector<int>> times = {};   ///< time matrix
+    std::vector<std::vector<double>> costs = {};  ///< cost matrix
+    std::vector<Customer> customers = {};         ///< customer list
+    std::vector<Vehicle> vehicles = {};           ///< vehicles list
+    std::vector<std::vector<int>> times = {};     ///< time matrix
     int max_violated_soft_tw =
-        std::numeric_limits<int>::max();    ///< max number of violated
-                                            /// soft time windows
+        std::numeric_limits<int>::max();  ///< max number of violated
+                                          /// soft time windows
 
     // TODO: should be part of ctor
     void set_up() {
@@ -156,20 +153,17 @@ public:
                 // customer
                 allowed_for_customer.resize(vehicles_size, false);
                 for (size_t t = 0; t < vehicles_size; ++t) {
-                    allowed_for_customer[t] = (suitable.cend() !=
-                        std::find(suitable.cbegin(), suitable.cend(),
-                            static_cast<int>(t)));
+                    allowed_for_customer[t] =
+                        (suitable.cend() != std::find(suitable.cbegin(),
+                                                      suitable.cend(),
+                                                      static_cast<int>(t)));
                 }
             }
         }
     }
 
-    inline size_t n_customers() const {
-        return this->customers.size();
-    }
-    inline size_t n_vehicles() const {
-        return this->vehicles.size();
-    }
+    inline size_t n_customers() const { return this->customers.size(); }
+    inline size_t n_vehicles() const { return this->vehicles.size(); }
     /// Get allowed vehicles for customer. Expected `customer` param is 0-based
     inline const std::vector<bool>& allowed_vehicles(size_t customer) const {
         return m_allowed_vehicles[customer];
@@ -183,4 +177,4 @@ public:
         return m_vehicle_types;
     }
 };
-}  // vrp
+}  // namespace vrp

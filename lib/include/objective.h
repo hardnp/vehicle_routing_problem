@@ -6,4 +6,4 @@
 namespace vrp {
 /// Objective function interface
 double objective(const Problem& prob, const Solution& sln);
-}  // vrp
+}  // namespace vrp

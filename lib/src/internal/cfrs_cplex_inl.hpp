@@ -1,14 +1,14 @@
 #include "cluster_first_route_second.h"
 
-#include <cassert>
 #include <algorithm>
-#include <random>
-#include <numeric>
-#include <utility>
+#include <cassert>
 #include <iostream>
-#include <stdexcept>
 #include <list>
+#include <numeric>
+#include <random>
+#include <stdexcept>
 #include <unordered_map>
+#include <utility>
 
 #define ILOUSESTL
 using namespace std;
@@ -33,19 +33,16 @@ namespace vrp {
 namespace detail {
 
 namespace {
-inline int volume(const TransportationQuantity& q) {
-    return q.volume;
-}
-inline int weight(const TransportationQuantity& q) {
-    return q.weight;
-}
+inline int volume(const TransportationQuantity& q) { return q.volume; }
+inline int weight(const TransportationQuantity& q) { return q.weight; }
 
-template<typename AttribAccessor>
+template <typename AttribAccessor>
 int total(AttribAccessor accessor, const std::vector<Vehicle>& vehicles,
-    const std::vector<size_t>& indices) {
+          const std::vector<size_t>& indices) {
     return std::accumulate(indices.cbegin(), indices.cend(), 0,
-        [&] (int val, size_t i) {
-            return val + accessor(vehicles[i].capacity); });
+                           [&](int val, size_t i) {
+                               return val + accessor(vehicles[i].capacity);
+                           });
 }
 
 /// Cost of assigning customer i to vehicle t. Single vehicle in type case.
@@ -56,7 +53,7 @@ inline double assignment_cost(const Problem& prob, size_t seed, size_t i) {
 
 /// Cost of assigning customer i to vehicle t. General case.
 double assignment_cost(const Problem& prob, const std::vector<size_t>& seeds,
-    size_t i) {
+                       size_t i) {
     const auto size = seeds.size();
     std::vector<double> costs(size);
     for (size_t s = 0; s < size; ++s) {
@@ -80,8 +77,8 @@ class Heuristic {
     IloCplex m_algo = IloCplex(m_model);
     IloObjective m_objective;
     IloExprArray m_capacity_fractions;
-    double m_alpha_v = 0.5, m_alpha_w = 0.5;    ///< volume/weight coefficients
-                                                /// to balance zeroed values
+    double m_alpha_v = 0.5, m_alpha_w = 0.5;  ///< volume/weight coefficients
+                                              /// to balance zeroed values
 
     inline void add_zero_constraint(size_t i, IloInt t) {
         IloExpr zero_expr(m_env);
@@ -131,7 +128,7 @@ public:
                 const auto& customers = types[t].avail_customers;
                 for (size_t i = 1; i < customers.size(); ++i) {
                     if (!customers[i]) {
-                        add_zero_constraint(i-1, t);
+                        add_zero_constraint(i - 1, t);
                     }
                 }
             }
@@ -144,15 +141,19 @@ public:
             // customers:
             size_t non_zero_volume_customers = 0, non_zero_weight_customers = 0;
             for (const auto& c : prob.customers) {
-                if (volume(c.demand) != 0) non_zero_volume_customers++;
-                if (weight(c.demand) != 0) non_zero_weight_customers++;
+                if (volume(c.demand) != 0)
+                    non_zero_volume_customers++;
+                if (weight(c.demand) != 0)
+                    non_zero_weight_customers++;
             }
 
             // vehicles:
             size_t non_zero_volume_vehicles = 0, non_zero_weight_vehicles = 0;
             for (const auto& v : V) {
-                if (volume(v.capacity) != 0) non_zero_volume_vehicles++;
-                if (weight(v.capacity) != 0) non_zero_weight_vehicles++;
+                if (volume(v.capacity) != 0)
+                    non_zero_volume_vehicles++;
+                if (weight(v.capacity) != 0)
+                    non_zero_weight_vehicles++;
             }
 
             // alpha'_v = non_zero volumes / all volumes
@@ -160,10 +161,10 @@ public:
             // alpha_v = alpha'_v / (alpha'_v + alpha'_w)
             // alpha_w = alpha'_w / (alpha'_v + alpha'_w)
             double alpha_prime_v = 0.0, alpha_prime_w = 0.0;
-            alpha_prime_v = 0.5 * (non_zero_volume_customers / n_customers
-                + non_zero_volume_vehicles / n_vehicles);
-            alpha_prime_w = 0.5 * (non_zero_weight_customers / n_customers
-                + non_zero_weight_vehicles / n_vehicles);
+            alpha_prime_v = 0.5 * (non_zero_volume_customers / n_customers +
+                                   non_zero_volume_vehicles / n_vehicles);
+            alpha_prime_w = 0.5 * (non_zero_weight_customers / n_customers +
+                                   non_zero_weight_vehicles / n_vehicles);
             double sum = alpha_prime_v + alpha_prime_w;
             m_alpha_v = alpha_prime_v / sum;
             m_alpha_w = alpha_prime_w / sum;
@@ -192,8 +193,9 @@ public:
                     for (size_t i = 1; i < n_customers; ++i) {
                         for (const auto& k : types[t].vehicles) {
                             const auto v = volume(V[k].capacity);
-                            if (v == 0) continue;
-                            volume_fraction += m_x[i-1][t] * v;
+                            if (v == 0)
+                                continue;
+                            volume_fraction += m_x[i - 1][t] * v;
                         }
                     }
                 }
@@ -204,19 +206,20 @@ public:
                     for (size_t i = 1; i < n_customers; ++i) {
                         for (const auto& k : types[t].vehicles) {
                             const auto w = weight(V[k].capacity);
-                            if (w == 0) continue;
-                            weight_fraction += m_x[i-1][t] * w;
+                            if (w == 0)
+                                continue;
+                            weight_fraction += m_x[i - 1][t] * w;
                         }
                     }
                 }
 
                 // total = volume + weight
                 if (total_volume == 0) {
-                    capacity_fractions.add(
-                        m_alpha_w * weight_fraction / total_weight);
+                    capacity_fractions.add(m_alpha_w * weight_fraction /
+                                           total_weight);
                 } else if (total_weight == 0) {
-                    capacity_fractions.add(
-                        m_alpha_v * volume_fraction / total_volume);
+                    capacity_fractions.add(m_alpha_v * volume_fraction /
+                                           total_volume);
                 } else {
                     capacity_fractions.add(
                         m_alpha_w * weight_fraction / total_weight +
@@ -231,8 +234,8 @@ public:
         {
             // (2)
             IloConstraintArray allowability_constraints(m_env);
-            for (size_t i = 1; i < n_customers; ++i){
-                const auto& array = m_x[i-1];
+            for (size_t i = 1; i < n_customers; ++i) {
+                const auto& array = m_x[i - 1];
                 IloExpr sum(m_env);
                 for (IloInt t = 0; t < array.getSize(); ++t) {
                     sum += array[t];
@@ -255,12 +258,13 @@ public:
                     IloExpr volume_sum(m_env);
                     for (size_t i = 1; i < n_customers; ++i) {
                         const auto v = volume(prob.customers[i].demand);
-                        if (v == 0) continue;
+                        if (v == 0)
+                            continue;
                         // TODO: questionable
-                        volume_sum += v * m_x[i-1][t];
+                        volume_sum += v * m_x[i - 1][t];
                     }
-                    balancing_constraints.add(
-                        volume_sum <= total_volume * m_objective);
+                    balancing_constraints.add(volume_sum <=
+                                              total_volume * m_objective);
                 }
 
                 // weight case:
@@ -269,21 +273,20 @@ public:
                     IloExpr weight_sum(m_env);
                     for (size_t i = 1; i < n_customers; ++i) {
                         const auto w = weight(prob.customers[i].demand);
-                        if (w == 0) continue;
+                        if (w == 0)
+                            continue;
                         // TODO: questionable
-                        weight_sum += w * m_x[i-1][t];
+                        weight_sum += w * m_x[i - 1][t];
                     }
-                    balancing_constraints.add(
-                        weight_sum <= total_weight * m_objective);
+                    balancing_constraints.add(weight_sum <=
+                                              total_weight * m_objective);
                 }
             }
             m_model.add(balancing_constraints);
         }
     }
 
-    ~Heuristic() {
-        m_algo.end();
-    }
+    ~Heuristic() { m_algo.end(); }
 
     void solve() {
         if (!m_algo.solve()) {
@@ -315,8 +318,8 @@ public:
     }
 
     /// Get mapping between customer and vehicle type for current solution
-    std::unordered_map<size_t, size_t> get_customer_types(
-        size_t depot_offset = 0) {
+    std::unordered_map<size_t, size_t>
+    get_customer_types(size_t depot_offset = 0) {
         auto assignment_map = this->get_values();
         std::unordered_map<size_t, size_t> mapped_types;
         for (size_t c = 0; c < assignment_map.size(); ++c) {
@@ -339,8 +342,8 @@ public:
             const auto& allowed = m_prob.allowed_types(k);
             for (size_t t = 0; t < allowed.size(); ++t) {
                 if (allowed[t]) {
-                    total_distance += assignment_cost(
-                        seeds.at(customer_to_type[t]), k);
+                    total_distance +=
+                        assignment_cost(seeds.at(customer_to_type[t]), k);
                 }
             }
         }
@@ -348,7 +351,7 @@ public:
         // (9) calculate normalized minimal insertion cost as a CPLEX function
         IloExpr insertion_costs(m_env);
         for (size_t i = 1; i < n_customers; ++i) {
-            const auto& array = m_x[i-1];
+            const auto& array = m_x[i - 1];
 
             // this must hold true because we operate on types:
             assert(static_cast<size_t>(array.getSize()) == seeds.size());
@@ -358,9 +361,9 @@ public:
             }
         }
         m_model.remove(m_objective);
-        m_objective = IloMinimize(m_env,
-            IloExpr(insertion_costs / total_distance
-                    + IloMax(m_capacity_fractions)));
+        m_objective =
+            IloMinimize(m_env, IloExpr(insertion_costs / total_distance +
+                                       IloMax(m_capacity_fractions)));
         m_model.add(m_objective);
     }
 };
@@ -376,26 +379,25 @@ inline double divide(int divident, int divider) {
 std::vector<double> calculate_weights(const Problem& prob) {
     const auto size = prob.n_customers();
     const auto& depot_costs = prob.costs[0];
-    const auto max_cost = *std::max_element(depot_costs.cbegin(),
-        depot_costs.cend());
-    const auto max = std::max_element(prob.customers.cbegin()+1,
-        prob.customers.cend(), [] (const auto& a, const auto& b) {
-            return a.demand < b.demand; });
+    const auto max_cost =
+        *std::max_element(depot_costs.cbegin(), depot_costs.cend());
+    const auto max = std::max_element(
+        prob.customers.cbegin() + 1, prob.customers.cend(),
+        [](const auto& a, const auto& b) { return a.demand < b.demand; });
     const auto max_volume = volume(max->demand);
     const auto max_weight = weight(max->demand);
     std::vector<double> weights(size, 0.0);
     for (size_t i = 1; i < size; ++i) {
-        weights[i] =
-            (divide(volume(prob.customers[i].demand), max_volume)
-            + divide(weight(prob.customers[i].demand), max_weight))
-            + (depot_costs[i] / max_cost);
+        weights[i] = (divide(volume(prob.customers[i].demand), max_volume) +
+                      divide(weight(prob.customers[i].demand), max_weight)) +
+                     (depot_costs[i] / max_cost);
     }
     return weights;
 }
 
 /// Get non-constructed groups of customers that belong to the same routes
 std::unordered_map<size_t, std::list<size_t>> group(const Heuristic& h,
-    size_t depot_offset = 0) {
+                                                    size_t depot_offset = 0) {
     auto assignment_map = h.get_values();
     std::unordered_map<size_t, std::list<size_t>> routes;
     for (size_t c = 0; c < assignment_map.size(); ++c) {
@@ -407,10 +409,9 @@ std::unordered_map<size_t, std::list<size_t>> group(const Heuristic& h,
     return routes;
 }
 
-template<typename T>
-using mat_t = std::vector<std::vector<T>>;
+template <typename T> using mat_t = std::vector<std::vector<T>>;
 
-template<typename T, typename ListIt>
+template <typename T, typename ListIt>
 T sum_route_part(const mat_t<T>& mat, ListIt first, ListIt last) {
     T sum = static_cast<T>(0);
     for (auto first2 = std::next(first, 1); first2 != last; ++first, ++first2) {
@@ -453,7 +454,8 @@ solve_cvrp(const Heuristic& h) {
         bool last_vehicle = false;
         for (size_t i = 0; i < vehicles.size(); ++i) {
             // FIXME: push everything in the last vehicle - no choice (?)
-            if (i == vehicles.size() - 1) last_vehicle = true;
+            if (i == vehicles.size() - 1)
+                last_vehicle = true;
             const size_t v = vehicles[i];
             TransportationQuantity running_capacity = prob.vehicles[v].capacity;
             // init
@@ -468,41 +470,44 @@ solve_cvrp(const Heuristic& h) {
                 std::list<opt_data_t> optimal_c2{};
                 for (const auto& c : unrouted) {
                     // skip if capacity is exceeded
-                    if (!last_vehicle
-                        && running_capacity < prob.customers[c].demand)
-                            continue;
+                    if (!last_vehicle &&
+                        running_capacity < prob.customers[c].demand)
+                        continue;
                     std::list<double> ratings_c2{};
                     for (auto i = route.cbegin(), j = std::next(i, 1);
-                        j != route.cend(); ++i, ++j) {
+                         j != route.cend(); ++i, ++j) {
                         // calculate total route distance with `c` included:
                         // 0->i + (i->c + c->j) + j->0
-                        auto route_dist = prob.costs[*i][c] + prob.costs[c][*j]
-                            + sum_route_part(prob.costs, route.cbegin(), j)
-                            + sum_route_part(prob.costs, j, route.cend());
+                        auto route_dist =
+                            prob.costs[*i][c] + prob.costs[c][*j] +
+                            sum_route_part(prob.costs, route.cbegin(), j) +
+                            sum_route_part(prob.costs, j, route.cend());
                         // calculate total route time with `c` included:
                         // 0->i + (i->c + c->j) + j->0
-                        auto route_time = prob.times[*i][c] + prob.times[c][*j]
-                            + sum_route_part(prob.times, route.cbegin(), j)
-                            + sum_route_part(prob.times, j, route.cend());
+                        auto route_time =
+                            prob.times[*i][c] + prob.times[c][*j] +
+                            sum_route_part(prob.times, route.cbegin(), j) +
+                            sum_route_part(prob.times, j, route.cend());
                         // total distance + total time:
-                        ratings_c2.emplace_back(
-                            beta_1*route_dist + beta_2*route_time);
+                        ratings_c2.emplace_back(beta_1 * route_dist +
+                                                beta_2 * route_time);
 // TODO: does this even work?
 #if EXPERIMENTAL  // TODO: verify it's worth it. may work better without it!
-                        // check optimal is good enough to be included:
+                  // check optimal is good enough to be included:
                         if (!last_vehicle) {
                             auto cost = prob.costs[0][c];
                             // TODO: add assignment_time as well?
-                            if (assignment_cost(prob, *i, c) > cost
-                                || assignment_cost(prob, *j, c) > cost) {
+                            if (assignment_cost(prob, *i, c) > cost ||
+                                assignment_cost(prob, *j, c) > cost) {
                                 continue;
                             }
                         }
 #endif
                     }
-                    if (ratings_c2.empty()) continue;
+                    if (ratings_c2.empty())
+                        continue;
                     auto min = std::min_element(ratings_c2.cbegin(),
-                        ratings_c2.cend());
+                                                ratings_c2.cend());
                     // Note: (distance + 1) to relate to actual route's start at
                     // depot. otherwise, we'd insert before depot
                     optimal_c2.emplace_back(std::make_tuple(
@@ -510,18 +515,20 @@ solve_cvrp(const Heuristic& h) {
                 }
 
                 // might occur due to customers skip (e.g. capacity < demand)
-                if (optimal_c2.empty()) continue;
+                if (optimal_c2.empty())
+                    continue;
 
                 // find optimal customer and update route
                 auto optimal = *std::min_element(
                     optimal_c2.cbegin(), optimal_c2.cend(),
-                    [] (const opt_data_t& a, const opt_data_t& b) {
-                        return std::get<1>(a) < std::get<1>(b);});
+                    [](const opt_data_t& a, const opt_data_t& b) {
+                        return std::get<1>(a) < std::get<1>(b);
+                    });
                 const auto& c = std::get<0>(optimal);
 
                 unrouted.remove(c);
-                route.insert(
-                    std::next(route.cbegin(), std::get<2>(optimal)), c);
+                route.insert(std::next(route.cbegin(), std::get<2>(optimal)),
+                             c);
                 running_capacity -= prob.customers[c].demand;
                 nothing_to_add = false;
             }
@@ -536,28 +543,27 @@ solve_cvrp(const Heuristic& h) {
         if (vehicle_and_route.second.size() > 2) {
             const auto v = vehicle_and_route.first;
             cleaned_routes.emplace_back(vehicle_to_type[v], v,
-                std::move(vehicle_and_route.second));
+                                        std::move(vehicle_and_route.second));
         }
     }
 
     return cleaned_routes;
 }
 
-std::vector<std::pair<size_t, std::list<size_t>>>
-routes_to_sln(std::vector<std::tuple<size_t, size_t, std::list<size_t>>> routes)
-{
+std::vector<std::pair<size_t, std::list<size_t>>> routes_to_sln(
+    std::vector<std::tuple<size_t, size_t, std::list<size_t>>> routes) {
     std::vector<std::pair<size_t, std::list<size_t>>> converted{};
     converted.reserve(routes.size());
     for (auto& values : routes) {
         converted.emplace_back(std::get<1>(values),
-            std::move(std::get<2>(values)));
+                               std::move(std::get<2>(values)));
     }
     return converted;
 }
 
 /// Select seeds for each route
-std::unordered_map<size_t, std::vector<size_t>> select_seeds(const Heuristic& h)
-{
+std::unordered_map<size_t, std::vector<size_t>>
+select_seeds(const Heuristic& h) {
     const auto& prob = h.prob();
     auto weights = calculate_weights(prob);
 
@@ -567,12 +573,11 @@ std::unordered_map<size_t, std::vector<size_t>> select_seeds(const Heuristic& h)
     // TODO: in fact, we don't need routes...
     for (auto& vehicle_route : routes) {
         auto& route = std::get<2>(vehicle_route);
-        route.sort([&weights] (size_t i, size_t j) {
-            return weights[i] > weights[j];
-        });
+        route.sort(
+            [&weights](size_t i, size_t j) { return weights[i] > weights[j]; });
     }
     // sort all routes to put bigger in the beginning
-    std::sort(routes.begin(), routes.end(), [] (const auto& a, const auto& b) {
+    std::sort(routes.begin(), routes.end(), [](const auto& a, const auto& b) {
         return std::get<2>(a).size() > std::get<2>(b).size();
     });
 
@@ -601,8 +606,9 @@ std::unordered_map<size_t, std::vector<size_t>> select_seeds(const Heuristic& h)
 
     // this must hold due to algorithm: seeds size == number of vehicles
     assert(std::accumulate(seeds.cbegin(), seeds.cend(), size_t(0),
-        [] (size_t sum, const auto& s) -> size_t {
-            return sum + s.second.size(); }) == size);
+                           [](size_t sum, const auto& s) -> size_t {
+                               return sum + s.second.size();
+                           }) == size);
 
     return seeds;
 }
@@ -615,7 +621,7 @@ std::vector<Solution> construct_solutions(const Heuristic& h, size_t count) {
     }
     return solutions;
 }
-}  // anonymous
+}  // namespace
 
 std::vector<Solution> cfrs_impl(const Problem& prob, size_t count) {
     Heuristic h(prob);
@@ -633,5 +639,5 @@ std::vector<Solution> cfrs_impl(const Problem& prob, size_t count) {
     return construct_solutions(h, count);
 }
 
-}  // detail
-}  // vrp
+}  // namespace detail
+}  // namespace vrp

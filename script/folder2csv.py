@@ -20,7 +20,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='Test folder to CSV instance converter')
     parser.add_argument('folders', nargs='+',
-        help='Real-life test instance folder(s)')
+                        help='Real-life test instance folder(s)')
     return parser.parse_args()
 
 
@@ -103,7 +103,7 @@ def parse_customer(io_stream):
         c_can_split = parse_bool(values[-1])
         # TODO: where's service time?
         table_customers[c_id] = (hard_tw_begin, hard_tw_end, soft_tw_begin,
-            soft_tw_end, c_type, c_can_split)
+                                 soft_tw_end, c_type, c_can_split)
     return table_customers
 
 
@@ -195,7 +195,8 @@ def parse_real_life_folder(folder):
 def write_table_customer(io_stream, tables):
     """Write table customer into provided stream"""
     io_stream.write('table customer\n')
-    io_stream.write('id;volume;weight;hard_tw_begin;hard_tw_end;soft_tw_begin;')
+    io_stream.write(
+        'id;volume;weight;hard_tw_begin;hard_tw_end;soft_tw_begin;')
     io_stream.write('soft_tw_end;service_time;suitable_vehicles\n')
 
     depot_subtrahend = min(i for i in tables['customer'].keys())
@@ -211,7 +212,8 @@ def write_table_customer(io_stream, tables):
         for t in suitable_types:
             suitable_vehicles += \
                 [k for k, v in tables['vehicle'].items() if v[0] == t]
-        service_time = sum([tables['vehicle'][v][2] for v in suitable_vehicles])
+        service_time = sum([tables['vehicle'][v][2]
+                            for v in suitable_vehicles])
         if suitable_vehicles:
             service_time /= len(suitable_vehicles)
         table_entry.append(service_time)  # service_time
@@ -239,7 +241,7 @@ def write_table_costs(io_stream, tables):
     io_stream.write('table cost\n')
 
     depot_subtrahend = min(i for i in tables['customer'].keys())
-    sub = lambda x: x - depot_subtrahend
+    def sub(x): return x - depot_subtrahend
 
     costs = {}
     n_customers = len(tables['customer'])
@@ -259,7 +261,7 @@ def write_table_times(io_stream, tables):
     io_stream.write('table time\n')
 
     depot_subtrahend = min(i for i in tables['customer'].keys())
-    sub = lambda x: x - depot_subtrahend
+    def sub(x): return x - depot_subtrahend
 
     times = {}
     n_customers = len(tables['customer'])

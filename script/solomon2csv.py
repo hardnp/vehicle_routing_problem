@@ -17,7 +17,8 @@ def parse_args():
     """Parse command-line arguments"""
     parser = argparse.ArgumentParser(
         description='Solomon to CSV instance converter')
-    parser.add_argument('instances', nargs='+', help='Solomon instance file(s)')
+    parser.add_argument('instances', nargs='+',
+                        help='Solomon instance file(s)')
     return parser.parse_args()
 
 
@@ -53,7 +54,8 @@ def parse_solomon_instance(io_stream):
 def write_table_customer(io_stream, customers):
     """Write table customer into provided stream"""
     io_stream.write('table customer\n')
-    io_stream.write('id;volume;weight;hard_tw_begin;hard_tw_end;soft_tw_begin;')
+    io_stream.write(
+        'id;volume;weight;hard_tw_begin;hard_tw_end;soft_tw_begin;')
     io_stream.write('soft_tw_end;service_time;suitable_vehicles\n')
     for customer in customers:
         row = customer[:1] + customer[3:4] + customer[3:6] + customer[4:6] \
@@ -112,7 +114,8 @@ def write_max_violated_soft_tw(io_stream):
 def main():
     """Main entry-point"""
     args = parse_args()
-    test_data = os.path.abspath(str(Path(__file__, '../../test_data/solomon/')))
+    test_data = os.path.abspath(
+        str(Path(__file__, '../../test_data/solomon/')))
     if not os.path.isdir(test_data):
         os.makedirs(test_data)
     for i, instance in enumerate(args.instances):

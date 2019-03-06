@@ -1,19 +1,24 @@
 #pragma once
 
+#include "problem.h"
+#include "route_point.h"
 #include "vehicle.h"
 
+#include <list>
 #include <utility>
 #include <vector>
-#include <list>
 
 namespace vrp {
 /// Solution representation
 class Solution {
 public:
-    using VehicleIndex = size_t;  ///< vehicle index in problem's vector
-                                  /// index != id
+    using VehicleIndex = size_t;   ///< vehicle index in problem's vector
+                                   /// index != id
     using CustomerIndex = size_t;  ///< customer index in problem's vector
                                    /// index != id
     std::vector<std::pair<VehicleIndex, std::list<CustomerIndex>>> routes;
+
+    // TODO: what is this int for?
+    std::vector<std::vector<std::pair<int, RoutePointTime>>> times;
 };
-}  // vrp
+}  // namespace vrp

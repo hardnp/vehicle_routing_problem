@@ -9,6 +9,6 @@
 namespace vrp {
 namespace detail {
 std::vector<Solution> cluster_first_route_second(const Problem& prob,
-    size_t count);
-}  // detail
-}  // vrp
+                                                 size_t count);
+}  // namespace detail
+}  // namespace vrp
