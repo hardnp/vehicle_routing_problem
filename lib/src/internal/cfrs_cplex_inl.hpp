@@ -65,6 +65,10 @@ double assignment_cost(const Problem& prob, const std::vector<size_t>& seeds,
     return *std::min_element(costs.cbegin(), costs.cend());
 }
 
+class Heuristic;
+
+std::unordered_map<size_t, std::vector<size_t>> select_seeds(const Heuristic&);
+
 /// Heuristic class that solves the relaxed 0-1 Integer Problem
 class Heuristic {
     const Problem& m_prob;
@@ -324,8 +328,8 @@ public:
         return mapped_types;
     }
 
-    void update_with_seeds(
-        const std::unordered_map<size_t, std::vector<size_t>>& seeds) {
+    void update() {
+        auto seeds = select_seeds(*this);
         const auto n_customers = m_prob.n_customers();
         auto customer_to_type = this->get_customer_types();
 
@@ -616,15 +620,16 @@ std::vector<Solution> construct_solutions(const Heuristic& h, size_t count) {
 std::vector<Solution> cfrs_impl(const Problem& prob, size_t count) {
     Heuristic h(prob);
     h.solve();
+#ifndef NDEBUG
     LOG_INFO << "Objective = " << h.algo().getObjValue() << EOL;
-    // we currently use vehicle_types_size == vehicles_size, so for each type
-    // there's exactly one route. since we don't really care about actual route
-    // construction right now, only about route seeds, we can skip route
-    // construction and start updating heuristic right away
-    auto seeds = select_seeds(h);
-    h.update_with_seeds(seeds);
+#endif
+    // loop here:
+    h.update();
     h.solve();
+#ifndef NDEBUG
     LOG_INFO << "Objective = " << h.algo().getObjValue() << EOL;
+#endif
+
     return construct_solutions(h, count);
 }
 
