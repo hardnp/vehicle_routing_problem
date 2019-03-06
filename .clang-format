@@ -1,0 +1,5 @@
+AllowShortLoopsOnASingleLine: true
+ColumnLimit: 80
+SpacesBeforeTrailingComments: 2
+IndentWidth: 4
+TabWidth: 4
