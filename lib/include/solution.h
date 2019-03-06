@@ -4,6 +4,7 @@
 
 #include <utility>
 #include <vector>
+#include <list>
 
 namespace vrp {
 /// Solution representation
@@ -13,6 +14,6 @@ public:
                                   /// index != id
     using CustomerIndex = size_t;  ///< customer index in problem's vector
                                    /// index != id
-    std::vector<std::pair<VehicleIndex, std::vector<CustomerIndex>>> routes;
+    std::vector<std::pair<VehicleIndex, std::list<CustomerIndex>>> routes;
 };
 }  // vrp

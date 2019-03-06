@@ -20,5 +20,7 @@ public:
     Problem load_input() const;
 
     void save_output(const Solution& sln) const;
+
+    void print_output(const Solution& sln) const;
 };
 }  // vrp
