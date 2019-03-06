@@ -29,7 +29,7 @@ bool type_specifier(std::string& line) {
 /// Reads file content into memory
 std::pair<std::vector<std::string>,
           std::map<std::string, std::pair<uint64_t, uint64_t>>>
-read_file(std::ifstream& stream) {
+read_file(std::istream& stream) {
     std::vector<std::string> content = {};
     std::vector<std::pair<std::string, uint64_t>> table_lines = {};
     std::string line = "";
@@ -72,13 +72,10 @@ void check_all_tables_exist(
 }  // namespace
 
 namespace vrp {
-CsvParser::CsvParser(const std::string& file_path, char delimiter)
-    : m_delimiter(delimiter), m_csv_file(std::ifstream(file_path)) {}
+CsvParser::CsvParser(char delimiter) : m_delimiter(delimiter) {}
 
-CsvParser::~CsvParser() { m_csv_file.close(); }
-
-Problem CsvParser::load_input() const {
-    auto read_data = read_file(this->m_csv_file);
+Problem CsvParser::read(std::istream& in) const {
+    auto read_data = read_file(in);
     auto& content = read_data.first;
     auto& data_ranges = read_data.second;
     check_all_tables_exist({detail::CustomerTableParser::table_name,
@@ -112,21 +109,19 @@ Problem CsvParser::load_input() const {
 }
 
 // TODO: verify that this works
-void CsvParser::save_output(const std::string& out_path, const Problem& prb,
-                            const Solution& sln) const {
+void CsvParser::write(std::ostream& out, const Problem& prob,
+                      const Solution& sln) const {
 
-    std::ofstream outfile(out_path + std::string("/solution.csv"));
+    out << "Route;"
+        << "Vehicle;"
+        << "Customer;"
+        << "Arrival;"
+        << "Start;"
+        << "Finish and leave;"
+        << "Distance from previous;"
+        << "Distance from depot\n";
 
-    outfile << "Route;"
-            << "Vehicle;"
-            << "Customer;"
-            << "Arrival;"
-            << "Start;"
-            << "Finish and leave;"
-            << "Distance from previous;"
-            << "Distance from depot\n";
-
-    char del = ';';
+    char del = this->m_delimiter;
 
     static const auto at = [](const auto& list, size_t i) {
         if (list.size() <= i) {
@@ -136,8 +131,8 @@ void CsvParser::save_output(const std::string& out_path, const Problem& prb,
     };
 
     // for calculating distance from previous customer
-    auto prev_dist = [&prb](const auto& route, size_t i) {
-        return prb.costs[at(route.second, i)][at(route.second, i - 1)];
+    auto prev_dist = [&prob](const auto& route, size_t i) {
+        return prob.costs[at(route.second, i)][at(route.second, i - 1)];
     };
 
     for (size_t i = 0; i < sln.routes.size(); ++i) {
@@ -147,29 +142,27 @@ void CsvParser::save_output(const std::string& out_path, const Problem& prb,
              ++j) {  // assuming the first node is depot
             double prev_cust_dist = prev_dist(route, j);
 
-            auto veh_id = prb.vehicles[route.first].id;
-            outfile << i << del << veh_id << del << at(route.second, j) << del;
+            auto veh_id = prob.vehicles[route.first].id;
+            out << i << del << veh_id << del << at(route.second, j) << del;
 
             auto find_veh_id = [&veh_id](const auto& split) {
                 return split.first == veh_id;
             };
+
             // seek for current vehicle in split-delivery
-            auto times = std::find_if(sln.times[i].begin(), sln.times[i].end(),
-                                      find_veh_id);
+            vrp::RoutePointTime time;
+            if (!sln.times.empty()) {
+                auto times = std::find_if(sln.times[i].begin(),
+                                          sln.times[i].end(), find_veh_id);
+                if (times != sln.times[i].end()) {
+                    time = times->second;
+                }
+            }
+            out << time;
 
-            outfile << (*times).second;
-
-            outfile << prev_cust_dist << del
-                    << prb.costs[at(route.second, j)][0] << "\n";
+            out << prev_cust_dist << del << prob.costs[at(route.second, j)][0]
+                << "\n";
         }
     }
-
-    outfile.close();
-    return;
-}
-
-void CsvParser::print_output(const Solution& sln) const {
-    UNUSED(sln)
-    return;
 }
 }  // namespace vrp

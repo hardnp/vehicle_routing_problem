@@ -1,36 +1,52 @@
 #include "csv_parser.h"
-#include "solution.h"
 #include "initial_heuristics.h"
 #include "objective.h"
+#include "solution.h"
 
+#include <algorithm>
+#include <fstream>
 #include <iostream>
 #include <iterator>
-#include <algorithm>
+#include <string>
+
+namespace {
+class FileHandler {
+    std::ifstream m_file;
+
+public:
+    FileHandler(std::string path) : m_file(path) {}
+
+    std::ifstream& get() { return m_file; }
+
+    ~FileHandler() { m_file.close(); }
+};
+}  // namespace
 
 /// Main entry-point to solver
 int main(int argc, char* argv[]) {
-    if (argc < 3) {
+    if (argc < 2) {
         std::cerr << "Wrong number of input arguments" << std::endl;
-        std::cerr << "Usage: vrp_solver CSV_INPUT_FILE CSV_OUTPUT_FILE [DELIMITER]"
+        std::cerr << "Usage: vrp_solver CSV_INPUT_FILE [DELIMITER]"
                   << std::endl;
         return 1;
     }
     char delimiter = ';';
-    if (argc > 3) {
-        delimiter = argv[3][0];
+    if (argc > 2) {
+        delimiter = argv[2][0];
     }
-    vrp::CsvParser parser(argv[1], delimiter);
-    auto problem = parser.load_input();
+    vrp::CsvParser parser(delimiter);
+    FileHandler input(argv[1]);
+    auto problem = parser.read(input.get());
 
     std::vector<vrp::Solution> solutions = {};
     for (int8_t heuristic = static_cast<int8_t>(vrp::InitialHeuristic::Savings);
-        heuristic < static_cast<int8_t>(vrp::InitialHeuristic::Last);
-        ++heuristic) {
-        auto heuristic_solutions = vrp::create_initial_solutions(problem,
-            static_cast<vrp::InitialHeuristic>(heuristic));
+         heuristic < static_cast<int8_t>(vrp::InitialHeuristic::Last);
+         ++heuristic) {
+        auto heuristic_solutions = vrp::create_initial_solutions(
+            problem, static_cast<vrp::InitialHeuristic>(heuristic));
         solutions.insert(solutions.end(),
-            std::make_move_iterator(heuristic_solutions.begin()),
-            std::make_move_iterator(heuristic_solutions.end()));
+                         std::make_move_iterator(heuristic_solutions.begin()),
+                         std::make_move_iterator(heuristic_solutions.end()));
     }
 
     if (solutions.empty()) {
@@ -38,9 +54,11 @@ int main(int argc, char* argv[]) {
     }
 
     auto best_sln = std::min_element(solutions.cbegin(), solutions.cend(),
-        [&problem] (const auto& a, const auto& b) {
-            return objective(problem, a) < objective(problem, b); });
-    parser.print_output(*best_sln);
+                                     [&problem](const auto& a, const auto& b) {
+                                         return objective(problem, a) <
+                                                objective(problem, b);
+                                     });
+    parser.write(std::cout, problem, *best_sln);
 
     return 0;
 }
