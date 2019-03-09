@@ -18,7 +18,6 @@ public:
                                    /// index != id
     std::vector<std::pair<VehicleIndex, std::list<CustomerIndex>>> routes;
 
-    // TODO: what is this int for?
     std::vector<std::pair<VehicleIndex, std::list<RoutePointTime>>> times;
 };
 }  // namespace vrp
