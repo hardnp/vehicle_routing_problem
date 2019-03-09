@@ -2,6 +2,7 @@
 #include "src/internal/subparsers.h"
 
 #include <algorithm>
+#include <cassert>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -69,6 +70,10 @@ void check_all_tables_exist(
         }
     }
 }
+
+std::ostream& operator<<(std::ostream& out, const vrp::RoutePointTime& t) {
+    return out << t.arrive << ';' << t.start << ';' << t.finish << ';';
+}
 }  // namespace
 
 namespace vrp {
@@ -130,38 +135,24 @@ void CsvParser::write(std::ostream& out, const Problem& prob,
         return *std::next(list.begin(), i);
     };
 
-    // for calculating distance from previous customer
+    // calculate distance from customer (i - 1) to customer i
     auto prev_dist = [&prob](const auto& route, size_t i) {
-        return prob.costs[at(route.second, i)][at(route.second, i - 1)];
+        return prob.costs[at(route.second, i - 1)][at(route.second, i)];
     };
 
+    assert(sln.routes.size() == sln.times.size());
     for (size_t i = 0; i < sln.routes.size(); ++i) {
         const auto& route = sln.routes[i];
+        const auto& time = sln.times[i];
 
-        for (size_t j = 1; j < route.second.size() - 1;
-             ++j) {  // assuming the first node is depot
-            double prev_cust_dist = prev_dist(route, j);
+        assert(route.second.size() == time.second.size());
+        // node with j == 0 is a depot
+        for (size_t j = 1; j < route.second.size() - 1; ++j) {
+            auto c = at(route.second, j);  // customer
 
-            auto veh_id = prob.vehicles[route.first].id;
-            out << i << del << veh_id << del << at(route.second, j) << del;
-
-            auto find_veh_id = [&veh_id](const auto& split) {
-                return split.first == veh_id;
-            };
-
-            // seek for current vehicle in split-delivery
-            vrp::RoutePointTime time;
-            if (!sln.times.empty()) {
-                auto times = std::find_if(sln.times[i].begin(),
-                                          sln.times[i].end(), find_veh_id);
-                if (times != sln.times[i].end()) {
-                    time = times->second;
-                }
-            }
-            out << time;
-
-            out << prev_cust_dist << del << prob.costs[at(route.second, j)][0]
-                << "\n";
+            out << i << del << route.first << del << c << del;
+            out << at(time.second, j);
+            out << prev_dist(route, j) << del << prob.costs[c][0] << "\n";
         }
     }
 }
