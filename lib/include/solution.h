@@ -19,6 +19,6 @@ public:
     std::vector<std::pair<VehicleIndex, std::list<CustomerIndex>>> routes;
 
     // TODO: what is this int for?
-    std::vector<std::vector<std::pair<int, RoutePointTime>>> times;
+    std::vector<std::pair<VehicleIndex, std::list<RoutePointTime>>> times;
 };
 }  // namespace vrp

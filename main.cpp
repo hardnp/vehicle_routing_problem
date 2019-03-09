@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <sstream>
 #include <string>
 
 namespace {
@@ -14,7 +15,14 @@ class FileHandler {
     std::ifstream m_file;
 
 public:
-    FileHandler(std::string path) : m_file(path) {}
+    FileHandler(std::string path) : m_file(path) {
+        if (!m_file.good()) {
+            std::stringstream ss;
+            ss << "something is wrong with the file path provided: "
+               << "'" << path << "'";
+            throw std::runtime_error(ss.str().c_str());
+        }
+    }
 
     std::ifstream& get() { return m_file; }
 
