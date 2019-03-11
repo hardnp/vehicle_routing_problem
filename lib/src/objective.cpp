@@ -15,7 +15,7 @@ std::vector<size_t> convert(const std::list<size_t>& customers) {
 }  // namespace
 
 double objective(const Problem& prob, const Solution& sln) {
-    double A = 1.;  // TODO(agolubev): add to CSV
+    double A = 1.;  // TODO(andrgolubev): add to CSV
     double objective_value = 0.;
     for (const auto& route : sln.routes) {
         const auto& vehicle = prob.vehicles[route.first];

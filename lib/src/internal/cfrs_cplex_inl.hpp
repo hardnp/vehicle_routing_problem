@@ -36,7 +36,7 @@ namespace {
 inline int volume(const TransportationQuantity& q) { return q.volume; }
 inline int weight(const TransportationQuantity& q) { return q.weight; }
 
-template <typename AttribAccessor>
+template<typename AttribAccessor>
 int total(AttribAccessor accessor, const std::vector<Vehicle>& vehicles,
           const std::vector<size_t>& indices) {
     return std::accumulate(indices.cbegin(), indices.cend(), 0,
@@ -409,9 +409,9 @@ std::unordered_map<size_t, std::list<size_t>> group(const Heuristic& h,
     return routes;
 }
 
-template <typename T> using mat_t = std::vector<std::vector<T>>;
+template<typename T> using mat_t = std::vector<std::vector<T>>;
 
-template <typename T, typename ListIt>
+template<typename T, typename ListIt>
 T sum_route_part(const mat_t<T>& mat, ListIt first, ListIt last) {
     T sum = static_cast<T>(0);
     for (auto first2 = std::next(first, 1); first2 != last; ++first, ++first2) {

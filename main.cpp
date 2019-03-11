@@ -1,6 +1,7 @@
 #include "csv_parser.h"
 #include "initial_heuristics.h"
 #include "objective.h"
+#include "optimal_solution.h"
 #include "solution.h"
 
 #include <algorithm>
@@ -61,11 +62,18 @@ int main(int argc, char* argv[]) {
         throw std::runtime_error("no solutions found");
     }
 
-    auto best_sln = std::min_element(solutions.cbegin(), solutions.cend(),
-                                     [&problem](const auto& a, const auto& b) {
-                                         return objective(problem, a) <
-                                                objective(problem, b);
-                                     });
+    std::vector<vrp::Solution> improved_solutions = {};
+    improved_solutions.reserve(solutions.size());
+    for (const auto& sln : solutions) {
+        improved_solutions.emplace_back(std::move(create_optimal_solution(
+            problem, sln, vrp::OptimalHeuristic::Tabu)));
+    }
+
+    auto best_sln = std::min_element(
+        improved_solutions.cbegin(), improved_solutions.cend(),
+        [&problem](const auto& a, const auto& b) {
+            return objective(problem, a) < objective(problem, b);
+        });
     parser.write(std::cout, problem, *best_sln);
 
     return 0;

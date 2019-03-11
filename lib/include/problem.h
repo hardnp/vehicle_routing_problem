@@ -33,7 +33,7 @@ private:
                                                      /// true means allowed,
                                                      /// false otherwise
 
-    template <typename IntegerT>
+    template<typename IntegerT>
     std::vector<size_t> to_vector(const std::list<IntegerT>& l) {
         std::vector<size_t> v;
         v.reserve(l.size());
