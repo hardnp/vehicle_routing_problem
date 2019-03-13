@@ -1,4 +1,5 @@
 #include "csv_parser.h"
+#include "objective.h"
 #include "src/internal/subparsers.h"
 
 #include <algorithm>
@@ -12,6 +13,18 @@
 namespace {
 /// Specifies unused variable
 #define UNUSED(x) (void)x;
+
+/// INFO stream
+#define LOG_INFO std::cout << "[INFO] "
+
+/// ERROR stream
+#define LOG_ERROR std::cerr << "[ERROR] "
+
+/// End of line, without stream flushing
+#define EOL "\n"
+
+/// End of line, with stream flushing
+#define EOL_FLUSH std::endl
 
 /// Checks whether given string is a supported type specifier
 bool type_specifier(std::string& line) {
@@ -155,5 +168,9 @@ void CsvParser::write(std::ostream& out, const Problem& prob,
             out << prev_dist(route, j) << del << prob.costs[c][0] << "\n";
         }
     }
+
+#ifndef NDEBUG
+    LOG_INFO << "Objective = " << objective(prob, sln) << EOL;
+#endif
 }
 }  // namespace vrp

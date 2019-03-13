@@ -555,43 +555,10 @@ Solution routes_to_sln(
     std::vector<std::tuple<size_t, size_t, std::list<size_t>>> routes) {
     Solution sln;
     sln.routes.reserve(routes.size());
-    sln.times.reserve(routes.size());
     for (auto& values : routes) {
         sln.routes.emplace_back(std::get<1>(values),
                                 std::move(std::get<2>(values)));
-        sln.times.emplace_back(std::get<1>(values),
-                               std::list<vrp::RoutePointTime>{});
     }
-
-    // TODO: optimize
-    static const auto at = [](const auto& list, size_t i) {
-        if (list.size() <= i) {
-            throw std::out_of_range("index out of list's range");
-        }
-        return *std::next(list.begin(), i);
-    };
-    const auto& customers = prob.customers;
-    for (size_t ri = 0; ri < sln.routes.size(); ++ri) {
-        const auto& route = sln.routes[ri].second;
-        auto& time = sln.times[ri].second;
-        int start_time = 0;
-        for (size_t i = 0; i < route.size() - 1; ++i) {
-            auto c = at(route, i);
-            auto next_c = at(route, i + 1);
-
-            RoutePointTime t;
-            t.arrive = start_time;
-            t.start = std::max(t.arrive, customers[c].hard_tw.first);
-            t.finish = t.start + customers[c].service_time;
-
-            start_time += t.finish + prob.times[c][next_c];
-
-            time.emplace_back(std::move(t));
-        }
-        // last node is a depot
-        time.emplace_back(start_time, start_time, start_time);
-    }
-
     return sln;
 }
 

@@ -69,12 +69,15 @@ int main(int argc, char* argv[]) {
             problem, sln, vrp::OptimalHeuristic::Tabu)));
     }
 
-    auto best_sln = std::min_element(
+    auto best_sln = *std::min_element(
         improved_solutions.cbegin(), improved_solutions.cend(),
         [&problem](const auto& a, const auto& b) {
             return objective(problem, a) < objective(problem, b);
         });
-    parser.write(std::cout, problem, *best_sln);
+
+    best_sln.update_times(problem);  // set times in case they're unset
+
+    parser.write(std::cout, problem, best_sln);
 
     return 0;
 }
