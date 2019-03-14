@@ -11,6 +11,18 @@
 #include <sstream>
 #include <string>
 
+/// INFO stream
+#define LOG_INFO std::cout << "[INFO] "
+
+/// ERROR stream
+#define LOG_ERROR std::cerr << "[ERROR] "
+
+/// End of line, without stream flushing
+#define EOL "\n"
+
+/// End of line, with stream flushing
+#define EOL_FLUSH std::endl
+
 namespace {
 class FileHandler {
     std::ifstream m_file;
@@ -62,6 +74,15 @@ int main(int argc, char* argv[]) {
         throw std::runtime_error("no solutions found");
     }
 
+#ifndef NDEBUG
+    auto best_initial_sln = *std::min_element(
+        solutions.cbegin(), solutions.cend(),
+        [&problem](const auto& a, const auto& b) {
+            return objective(problem, a) < objective(problem, b);
+        });
+    LOG_INFO << "Objective = " << objective(problem, best_initial_sln) << EOL;
+#endif
+
     std::vector<vrp::Solution> improved_solutions = {};
     improved_solutions.reserve(solutions.size());
     for (const auto& sln : solutions) {
@@ -78,6 +99,10 @@ int main(int argc, char* argv[]) {
     best_sln.update_times(problem);  // set times in case they're unset
 
     parser.write(std::cout, problem, best_sln);
+
+#ifndef NDEBUG
+    LOG_INFO << "Objective = " << objective(problem, best_sln) << EOL;
+#endif
 
     return 0;
 }

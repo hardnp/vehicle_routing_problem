@@ -5,7 +5,7 @@ namespace vrp {
 namespace {
 // TODO: get rid of it later
 std::vector<size_t> convert(const std::list<size_t>& customers) {
-    std::vector<size_t> converted{};
+    std::vector<size_t> converted;
     converted.reserve(customers.size());
     for (const auto& c : customers) {
         converted.emplace_back(c);

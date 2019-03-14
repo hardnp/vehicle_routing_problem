@@ -23,9 +23,14 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     };
 
     tabu::LocalSearchMethods ls(prob);
+
     Solution best_sln = initial_sln;
-    std::vector<Solution> slns = {initial_sln, initial_sln, initial_sln,
-                                  initial_sln};
+    // init temporary information:
+    best_sln.update_customer_owners(prob);
+    best_sln.update_used_vehicles();
+    assert(!best_sln.customer_owners.empty());
+
+    std::vector<Solution> slns = {best_sln, best_sln, best_sln, best_sln};
     assert(slns.size() == ls.size());
 
     // i - iterations counter, can be reset if improvement found

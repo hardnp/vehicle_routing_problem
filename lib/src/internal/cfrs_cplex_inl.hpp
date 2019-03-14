@@ -628,13 +628,13 @@ std::vector<Solution> cfrs_impl(const Problem& prob, size_t count) {
     Heuristic h(prob);
     h.solve();
 #ifndef NDEBUG
-    LOG_INFO << "Objective = " << h.algo().getObjValue() << EOL;
+    LOG_INFO << "(CPLEX) Objective = " << h.algo().getObjValue() << EOL;
 #endif
     // loop here:
     h.update();
     h.solve();
 #ifndef NDEBUG
-    LOG_INFO << "Objective = " << h.algo().getObjValue() << EOL;
+    LOG_INFO << "(CPLEX) Objective = " << h.algo().getObjValue() << EOL;
 #endif
 
     return construct_solutions(h, count);

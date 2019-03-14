@@ -137,7 +137,6 @@ public:
             }
         }
 
-        // TODO: get rid of this:
         // set allowed vehicles
         m_allowed_vehicles.resize(customers_size, {});
         for (size_t c = 0; c < customers_size; ++c) {
@@ -167,6 +166,10 @@ public:
     /// Get allowed vehicles for customer. Expected `customer` param is 0-based
     inline const std::vector<bool>& allowed_vehicles(size_t customer) const {
         return m_allowed_vehicles[customer];
+    }
+    /// Get allowed vehicles for customer. Expected `customer` param is 0-based
+    inline size_t allowed_vehicles_size() const {
+        return m_allowed_vehicles.size();
     }
     /// Get allowed types for customer. Expected `customer` param is 0-based
     inline const std::vector<bool>& allowed_types(size_t customer) const {
