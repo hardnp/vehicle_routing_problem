@@ -11,10 +11,7 @@ namespace tabu {
 class LocalSearchMethods {
     const Problem& m_prob;
 
-    using methods_t = std::vector<std::function<Solution(const Solution&)>>;
-    // typedef Solution (*function_t)(const Solution&);
-    // using methods_t = std::vector<function_t>;
-    // using methods_t = std::vector<Solution (*)(const Solution&)>;
+    using methods_t = std::vector<std::function<void(Solution&)>>;
     methods_t m_methods = methods_t(4);
 
 public:
@@ -31,13 +28,10 @@ public:
     const methods_t::value_type& operator[](size_t i) const;
 
     // TODO: return tabu move as well
-    Solution exchange(const Solution& sln);
-
-    Solution relocate(const Solution& sln);
-
-    Solution relocate_split(const Solution& sln);
-
-    Solution two_opt(const Solution& sln);
+    void exchange(Solution& sln);
+    void relocate(Solution& sln);
+    void relocate_split(Solution& sln);
+    void two_opt(Solution& sln);
 };
 }  // namespace tabu
 }  // namespace vrp

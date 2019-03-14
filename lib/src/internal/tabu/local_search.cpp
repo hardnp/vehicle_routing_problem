@@ -73,44 +73,43 @@ operator[](size_t i) const {
     return m_methods[i];
 }
 
-Solution LocalSearchMethods::relocate(const Solution& sln) { return sln; }
+void LocalSearchMethods::relocate(Solution& sln) { return; }
 
-Solution LocalSearchMethods::relocate_split(const Solution& sln) { return sln; }
+void LocalSearchMethods::relocate_split(Solution& sln) { return; }
 
-Solution LocalSearchMethods::exchange(const Solution& sln) { return sln; }
+void LocalSearchMethods::exchange(Solution& sln) { return; }
 
-Solution LocalSearchMethods::two_opt(const Solution& sln) {
-    Solution new_sln = sln;
-    for (size_t ri = 0; ri < new_sln.routes.size(); ++ri) {
+void LocalSearchMethods::two_opt(Solution& sln) {
+    for (size_t ri = 0; ri < sln.routes.size(); ++ri) {
         // depots are out of 2-opt scope, so we remove them
-        auto route = std::move(remove_depots(new_sln.routes[ri].second));
+        auto route = std::move(remove_depots(sln.routes[ri].second));
 
-        bool can_improve = route.size() > 2;  // there's room for improvement
+        bool can_improve =
+            route.size() > 2;  // there must be improvement options
         while (can_improve) {
-            auto curr_best_value = objective(m_prob, new_sln);
+            auto curr_best_value = objective(m_prob, sln);
             bool found_new_best = false;
             for (size_t i = 0; i < route.size() - 1; ++i) {
                 if (found_new_best)  // fast loop break
                     break;
                 for (size_t k = i + 1; k < route.size(); ++k) {
                     auto old_route =
-                        std::move(new_sln.routes[ri].second);  // save old sln
+                        std::move(sln.routes[ri].second);  // save old sln
 
                     // perform 2-opt on solution
                     auto route_copy = route;
                     two_opt_swap(route_copy, i, k);
-                    new_sln.routes[ri].second =
-                        std::move(add_depots(route_copy));
+                    sln.routes[ri].second = std::move(add_depots(route_copy));
 
                     // decide whether move is good
-                    auto value = objective(m_prob, new_sln);
+                    auto value = objective(m_prob, sln);
                     if (value < curr_best_value) {  // move is good
                         route = std::move(route_copy);
                         found_new_best = true;
                         break;
                     } else {  // move is bad
                         // roll back changes to solution
-                        new_sln.routes[ri].second = std::move(old_route);
+                        sln.routes[ri].second = std::move(old_route);
                     }
                 }
             }
@@ -119,7 +118,6 @@ Solution LocalSearchMethods::two_opt(const Solution& sln) {
             can_improve = found_new_best;
         }
     }
-    return new_sln;
 }
 }  // namespace tabu
 }  // namespace vrp

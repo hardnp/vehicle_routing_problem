@@ -34,7 +34,7 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
          ++i, ++ci) {
         for (size_t m = 0; m < ls.size(); ++m) {
             // re-write current solution
-            slns[m] = ls[m](slns[m]);
+            ls[m](slns[m]);
         }
         auto min_sln_it =
             std::min_element(slns.cbegin(), slns.cend(), sln_comp);
