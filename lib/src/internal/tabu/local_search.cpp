@@ -8,19 +8,21 @@
 namespace vrp {
 namespace tabu {
 namespace {
-std::list<Solution::CustomerIndex>&
-remove_depots(std::list<Solution::CustomerIndex>& route) {
-    route.pop_front();
-    route.pop_back();
-    return route;
+std::list<Solution::CustomerIndex>
+remove_depots(const std::list<Solution::CustomerIndex>& route) {
+    auto copy = route;
+    copy.pop_front();
+    copy.pop_back();
+    return copy;
 }
 
-std::list<Solution::CustomerIndex>&
-add_depots(std::list<Solution::CustomerIndex>& route) {
+std::list<Solution::CustomerIndex>
+add_depots(const std::list<Solution::CustomerIndex>& route) {
     static constexpr const Solution::CustomerIndex depot = 0;
-    route.emplace_front(depot);
-    route.emplace_back(depot);
-    return route;
+    auto copy = route;
+    copy.emplace_front(depot);
+    copy.emplace_back(depot);
+    return copy;
 }
 
 void two_opt_swap(std::list<Solution::CustomerIndex>& route, size_t i,
@@ -80,35 +82,42 @@ Solution LocalSearchMethods::exchange(const Solution& sln) { return sln; }
 Solution LocalSearchMethods::two_opt(const Solution& sln) {
     Solution new_sln = sln;
     for (size_t ri = 0; ri < new_sln.routes.size(); ++ri) {
-        auto route = new_sln.routes[ri].second;
-        remove_depots(route);
-        bool can_improve = true;
+        // depots are out of 2-opt scope, so we remove them
+        auto route = std::move(remove_depots(new_sln.routes[ri].second));
+
+        bool can_improve = route.size() > 2;  // there's room for improvement
         while (can_improve) {
             auto curr_best_value = objective(m_prob, new_sln);
             bool found_new_best = false;
-            // TODO: start from i = 0 or i = 1??
             for (size_t i = 0; i < route.size() - 1; ++i) {
                 if (found_new_best)  // fast loop break
                     break;
                 for (size_t k = i + 1; k < route.size(); ++k) {
-                    auto s = new_sln;
-                    s.routes[ri].second = route;
-                    two_opt_swap(s.routes[ri].second, i, k);
-                    add_depots(s.routes[ri].second);
-                    auto value = objective(m_prob, s);
-                    if (value < curr_best_value) {
-                        route = s.routes[ri].second;
-                        remove_depots(route);
+                    auto old_route =
+                        std::move(new_sln.routes[ri].second);  // save old sln
+
+                    // perform 2-opt on solution
+                    auto route_copy = route;
+                    two_opt_swap(route_copy, i, k);
+                    new_sln.routes[ri].second =
+                        std::move(add_depots(route_copy));
+
+                    // decide whether move is good
+                    auto value = objective(m_prob, new_sln);
+                    if (value < curr_best_value) {  // move is good
+                        route = std::move(route_copy);
                         found_new_best = true;
-                        new_sln = s;
                         break;
+                    } else {  // move is bad
+                        // roll back changes to solution
+                        new_sln.routes[ri].second = std::move(old_route);
                     }
                 }
             }
+
             // if new best found: continue, else: stop
             can_improve = found_new_best;
         }
-        add_depots(route);
     }
     return new_sln;
 }
