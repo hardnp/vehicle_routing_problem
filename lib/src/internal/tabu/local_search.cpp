@@ -80,6 +80,8 @@ void LocalSearchMethods::relocate_split(Solution& sln) { return; }
 void LocalSearchMethods::exchange(Solution& sln) { return; }
 
 void LocalSearchMethods::two_opt(Solution& sln) {
+    auto curr_best_value = objective(m_prob, sln);
+
     for (size_t ri = 0; ri < sln.routes.size(); ++ri) {
         // depots are out of 2-opt scope, so we remove them
         auto route = std::move(remove_depots(sln.routes[ri].second));
@@ -87,7 +89,6 @@ void LocalSearchMethods::two_opt(Solution& sln) {
         bool can_improve =
             route.size() > 2;  // there must be improvement options
         while (can_improve) {
-            auto curr_best_value = objective(m_prob, sln);
             bool found_new_best = false;
             for (size_t i = 0; i < route.size() - 1; ++i) {
                 if (found_new_best)  // fast loop break
@@ -104,6 +105,7 @@ void LocalSearchMethods::two_opt(Solution& sln) {
                     // decide whether move is good
                     auto value = objective(m_prob, sln);
                     if (value < curr_best_value) {  // move is good
+                        curr_best_value = value;
                         route = std::move(route_copy);
                         found_new_best = true;
                         break;
