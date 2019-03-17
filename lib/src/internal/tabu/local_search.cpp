@@ -33,6 +33,14 @@ inline Solution::CustomerIndex at(const Solution::RouteType& route, size_t i) {
     return *std::next(route.cbegin(), i);
 }
 
+inline Solution::RouteType::iterator atit(Solution::RouteType& route,
+                                          size_t i) {
+    if (i >= route.size()) {
+        throw std::out_of_range("i >= route size");
+    }
+    return std::next(route.begin(), i);
+}
+
 inline Solution::RouteType::const_iterator
 atit(const Solution::RouteType& route, size_t i) {
     if (i >= route.size()) {
@@ -223,10 +231,11 @@ void LocalSearchMethods::relocate(Solution& sln) {
                 sln.update_customer_owners(m_prob, r_out);
                 // TODO: is break valid or we can improve further?
                 break;
+            } else {
+                // move is bad - roll back the changes
+                route_in.insert(erased, customer);
+                route_out.erase(inserted);
             }
-            // move is bad - roll back the changes
-            route_in.insert(erased, customer);
-            route_out.erase(inserted);
         }
 
         // check if creating a new route is better than any relocation
@@ -270,12 +279,12 @@ void LocalSearchMethods::relocate(Solution& sln) {
                 sln.update_customer_owners(m_prob, r_in);
                 sln.update_customer_owners(m_prob, sln.routes.size() - 1);
                 sln.used_vehicles.emplace(used_vehicle);
-                continue;
+            } else {
+                // move is bad - roll back the changes
+                route_in.insert(erased, customer);
+                sln.routes.pop_back();
+                unused_vehicles.emplace(used_vehicle);
             }
-            // move is bad - roll back the changes
-            route_in.insert(erased, customer);
-            sln.routes.pop_back();
-            unused_vehicles.emplace(used_vehicle);
         }
     }
     delete_loops(sln);
@@ -284,7 +293,60 @@ void LocalSearchMethods::relocate(Solution& sln) {
 
 void LocalSearchMethods::relocate_split(Solution& sln) { return; }
 
-void LocalSearchMethods::exchange(Solution& sln) { return; }
+void LocalSearchMethods::exchange(Solution& sln) {
+    auto curr_best_value = objective(m_prob, sln);
+    const auto size = m_prob.n_customers();
+    for (size_t customer = 1; customer < size; ++customer) {
+        // TODO: handle case when route not found - debug only?
+        size_t r1 = 0, c_index = 0;
+        std::tie(r1, c_index) = sln.customer_owners[customer];
+        auto& route1 = sln.routes[r1].second;
+        if (is_loop(route1)) {
+            continue;
+        }
+        for (size_t neighbour = 1; neighbour < size; ++neighbour) {
+            // TODO: handle case when route not found - debug only?
+            size_t r2 = 0, n_index = 0;
+            std::tie(r2, n_index) = sln.customer_owners[neighbour];
+            // do not relocate inside the same route
+            if (r1 == r2) {
+                continue;
+            }
+
+            auto& route2 = sln.routes[r2].second;
+            if (is_loop(route2)) {
+                continue;
+            }
+
+            // check if both customers can be exchanged
+            if (!site_dependent(m_prob, sln.routes[r2].first, customer) ||
+                !site_dependent(m_prob, sln.routes[r1].first, neighbour)) {
+                // cannot exchange customers within forbidden route
+                continue;
+            }
+
+            // we assume we can exchange two iterators at this point
+
+            // perform exchange (just swap customer indices)
+            auto it1 = atit(route1, c_index), it2 = atit(route2, n_index);
+            std::swap(*it1, *it2);
+
+            // decide whether move is good
+            const auto value = objective(m_prob, sln);
+            // move is good
+            if (value < curr_best_value) {
+                curr_best_value = value;
+                sln.update_customer_owners(m_prob, r1);
+                sln.update_customer_owners(m_prob, r2);
+                // TODO: is break valid or we can improve further?
+                break;
+            } else {
+                // move is bad - roll back the changes
+                std::swap(*it1, *it2);
+            }
+        }
+    }
+}
 
 // TODO: check constraints & tabu lists
 void LocalSearchMethods::two_opt(Solution& sln) {
@@ -317,9 +379,10 @@ void LocalSearchMethods::two_opt(Solution& sln) {
                         route = std::move(route_copy);
                         found_new_best = true;
                         break;
+                    } else {
+                        // move is bad - roll back the changes
+                        sln.routes[ri].second = std::move(old_route);
                     }
-                    // move is bad - roll back the changes
-                    sln.routes[ri].second = std::move(old_route);
                 }
             }
 
