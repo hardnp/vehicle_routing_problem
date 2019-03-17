@@ -160,6 +160,10 @@ void LocalSearchMethods::relocate(Solution& sln) {
         // TODO: handle case when route not found - debug only?
         size_t r_in = 0, c_index = 0;
         std::tie(r_in, c_index) = sln.customer_owners[customer];
+        auto& route_in = sln.routes[r_in].second;
+        if (is_loop(route_in)) {
+            continue;
+        }
         for (size_t neighbour = 1; neighbour < size; ++neighbour) {
             // TODO: handle case when route not found - debug only?
             size_t r_out = 0, n_index = 0;
@@ -169,10 +173,6 @@ void LocalSearchMethods::relocate(Solution& sln) {
                 continue;
             }
 
-            auto& route_in = sln.routes[r_in].second;
-            if (is_loop(route_in)) {
-                continue;
-            }
             auto& route_out = sln.routes[r_out].second;
             if (is_loop(route_out)) {
                 continue;
@@ -229,51 +229,54 @@ void LocalSearchMethods::relocate(Solution& sln) {
             route_out.erase(inserted);
         }
 
-        // indices might have changed during "for(neighbours)" loop
-        std::tie(r_in, c_index) = sln.customer_owners[customer];
+        // check if creating a new route is better than any relocation
+        {
+            // indices might have changed during "for(neighbours)" loop
+            std::tie(r_in, c_index) = sln.customer_owners[customer];
 
-        if (sln.routes.size() >= vehicles_size) {
-            continue;
-        }
-
-        // find suitable vehicle
-        bool found_suitable_vehicle = false;
-        size_t used_vehicle = std::numeric_limits<size_t>::max();
-        for (auto v : unused_vehicles) {
-            const bool enough_capacity = m_prob.vehicles[v].capacity >=
-                                         m_prob.customers[customer].demand;
-            if (enough_capacity && site_dependent(m_prob, v, customer)) {
-                sln.routes.emplace_back(v, add_depots({customer}));
-                used_vehicle = v;
-                unused_vehicles.erase(v);  // TODO: is it safe though?
-                found_suitable_vehicle = true;
-                break;
+            if (sln.routes.size() >= vehicles_size) {
+                continue;
             }
-        }
-        if (!found_suitable_vehicle) {
-            continue;
-        }
-        assert(used_vehicle != std::numeric_limits<size_t>::max());
 
-        // we assume there's a suitable vehicle at this point
+            // find suitable vehicle
+            bool found_suitable_vehicle = false;
+            size_t used_vehicle = std::numeric_limits<size_t>::max();
+            for (auto v : unused_vehicles) {
+                const bool enough_capacity = m_prob.vehicles[v].capacity >=
+                                             m_prob.customers[customer].demand;
+                if (enough_capacity && site_dependent(m_prob, v, customer)) {
+                    sln.routes.emplace_back(v, add_depots({customer}));
+                    used_vehicle = v;
+                    unused_vehicles.erase(v);  // TODO: is it safe though?
+                    found_suitable_vehicle = true;
+                    break;
+                }
+            }
+            if (!found_suitable_vehicle) {
+                continue;
+            }
+            assert(used_vehicle != std::numeric_limits<size_t>::max());
 
-        auto& route_in = sln.routes[r_in].second;
-        auto erased = route_in.erase(atit(route_in, c_index));
+            // we assume there's a suitable vehicle at this point
 
-        // decide whether move is good
-        const auto value = objective(m_prob, sln);
-        // move is good
-        if (value < curr_best_value) {
-            curr_best_value = value;
-            sln.update_customer_owners(m_prob, r_in);
-            sln.update_customer_owners(m_prob, sln.routes.size() - 1);
-            sln.used_vehicles.emplace(used_vehicle);
-            continue;
+            auto& route_in = sln.routes[r_in].second;
+            auto erased = route_in.erase(atit(route_in, c_index));
+
+            // decide whether move is good
+            const auto value = objective(m_prob, sln);
+            // move is good
+            if (value < curr_best_value) {
+                curr_best_value = value;
+                sln.update_customer_owners(m_prob, r_in);
+                sln.update_customer_owners(m_prob, sln.routes.size() - 1);
+                sln.used_vehicles.emplace(used_vehicle);
+                continue;
+            }
+            // move is bad - roll back the changes
+            route_in.insert(erased, customer);
+            sln.routes.pop_back();
+            unused_vehicles.emplace(used_vehicle);
         }
-        // move is bad - roll back the changes
-        route_in.insert(erased, customer);
-        sln.routes.pop_back();
-        unused_vehicles.emplace(used_vehicle);
     }
     delete_loops(sln);
     sln.update_customer_owners(m_prob);
