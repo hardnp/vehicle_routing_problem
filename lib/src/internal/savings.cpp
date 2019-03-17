@@ -12,22 +12,26 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
     std::cout << "SAVINGS HEURISTIC" << std::endl;
 
     const auto cust_size = prob.customers.size() - 1;
-    const auto points = cust_size + 1; // + 1 for depot itself
+    const auto points = cust_size + 1;  // + 1 for depot itself
 
     // vehicle id <-> customets ids
     std::vector<std::pair<size_t, std::vector<size_t>>> routes;
     routes.reserve(cust_size);
 
+    // valid routes
+    std::vector<size_t> valid(cust_size, 1);
+    valid[0] = 0;
+
     // visited customers
-    std::vector<int> dest(points, 0);
+    std::vector<size_t> dest(points, 0);
     dest[0] = 1;
 
     // started from customers
-    std::vector<int> src(points, 0);
+    std::vector<size_t> src(points, 0);
     src[0] = 1;
 
     // backward edges
-    std::vector<int> back_ed(points, 0);
+    std::vector<size_t> back_ed(points, 0);
 
     // start initialisation
     std::cout << "INIT ROUTES" << std::endl;
@@ -35,10 +39,11 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
         routes.push_back({i, {0, i, 0}});
     }
 
-    // customer id <-> its root
-    std::vector<size_t> cust_root_matcher(points, 0);
-    for (unsigned int i = 1; i < points; ++i) {
-        cust_root_matcher[i] = i;
+    // cust id <-> route
+    std::map<size_t, std::vector<size_t>*> route_map;
+
+    for (unsigned int i = 0; i < points; ++i) {
+        route_map[i] = &routes[i].second;
     }
 
     // saving for i and j vertices
@@ -49,17 +54,15 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
     };
 
     std::vector<S> save(points * points, {0, 0, 0});
-    std::cout << points << " " << prob.costs.size() << ' '
-              << prob.costs[0].size() << ' '<<save.size()<<std::endl;
+
     // calculating matrix(vector) of savings
     for (unsigned int i = 0; i < points; ++i) {
         for (unsigned int j = 0; j < points; ++j) {
-            std::cout << i * points + j << std::endl;
             save[i * points + j] = {
                 i, j, prob.costs[i][0] + prob.costs[0][j] - prob.costs[i][j]};
         }
     }
-    std::cout << "DEBUG2" << std::endl;
+
     // sort and erase nonreq savings
     std::sort(save.begin(), save.end(),
               [](const S& a, const S& b) { return a.save_ij < b.save_ij; });
@@ -69,7 +72,7 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                               }),
                save.end());
 
-    // DEBUGGING @DELETE ME@
+    // savings
     std::cout << std::endl << "SAVINGS I J" << std::endl;
     for (auto a : save) {
         std::cout << "saving " << a.i << " to " << a.j << " with save "
@@ -89,12 +92,13 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 
     // DELETE ME (cout)
     std::cout << "TIMES (id start finish current)" << std::endl;
-    for (auto i = 0; i < cust_size; ++i) {
+    for (auto i = 0; i < points; ++i) {
         times[prob.customers[i].id] = {
             (unsigned int)prob.customers[i].hard_tw.first,
             (unsigned int)prob.customers[i].hard_tw.second,
-            std::min((unsigned int)prob.customers[i].hard_tw.first,
-                     (unsigned int)prob.times[0][prob.customers[i].id])};
+            /*std::min((unsigned int)prob.customers[i].hard_tw.first,
+                     (unsigned int)prob.times[0][prob.customers[i].id])};*/
+            (unsigned int)prob.times[0][prob.customers[i].id]};
         std::cout << prob.customers[i].id << ' '
                   << times[prob.customers[i].id].start << ' '
                   << times[prob.customers[i].id].finish << ' '
@@ -113,6 +117,15 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
         if (!src[best_save.i] && !dest[best_save.j] &&
             (best_save.j != best_save.i) &&
             !(back_ed[best_save.i] == best_save.j)) {
+
+            /*std::cout << "routes:" << std::endl;
+            for (auto& r : routes) {
+                for (auto& c : r.second) {
+                    std::cout << c << ' ';
+                }
+                std::cout << std::endl;
+            }
+            std::cout << std::endl;*/
 
             // handle routes & machines
             // std::cout << "GOOD EDGE TO LOOK AT " << best_save.i << " to " <<
@@ -134,8 +147,12 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                 times[best_save.j].current =
                     times[best_save.i].current +
                     prob.times[best_save.i][best_save.j];
-                routes[best_save.i].second.insert(
-                    routes[best_save.i].second.end() - 2, best_save.j);
+                /*routes[best_save.i].second.insert(
+                    routes[best_save.i].second.end() - 2, best_save.j);*/
+
+                route_map[best_save.i]->insert(route_map[best_save.i]->end() - 1, best_save.j);
+                valid[best_save.j] = 0;
+                route_map[best_save.j] = route_map[best_save.i];
             } else {
                 int offset = times[best_save.i].current +
                              prob.times[best_save.i][best_save.j] -
@@ -147,10 +164,11 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                 // offset is ok for j-route
                 int flag = 0;
                 // std::cout << "j root of "<< best_save.j << std::endl;
-                auto j_route = routes[best_save.j];
+
+                // auto j_route = routes[best_save.j];
 
                 // ckeck offset for that j-route
-                for (auto cust : j_route.second) {
+                for (auto cust : *route_map[best_save.j]) {
                     if (cust != 0 &&
                         (times[cust].current + offset > times[cust].finish)) {
                         flag = 1;
@@ -165,14 +183,17 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                     src[best_save.i] = 1;
                     back_ed[best_save.j] = best_save.i;
                     fine.push_back(best_save);
-                    for (auto cust : j_route.second) {
+                    valid[best_save.j] = 0;
+                    for (auto cust : *route_map[best_save.j]) {
                         if (cust != 0) {
+                            //std::cout<<cust<<std::endl;
                             times[cust].current += offset;
-                            cust_root_matcher[cust] = best_save.j;
-                            routes[best_save.i].second.insert(
-                                routes[best_save.i].second.end() - 2, cust);
+                            /*routes[best_save.i].second.insert(
+                                routes[best_save.i].second.end() - 2, cust);*/
+                            route_map[best_save.i]->insert(route_map[best_save.i]->end() - 1, cust);
+                            route_map[cust] = route_map[best_save.i];
                         }
-                    }
+                    } 
                 }
             }
             /*for (auto a : times) {
@@ -189,10 +210,11 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
         std::cout << a.i << " to " << a.j << " with save " << a.save_ij
                   << std::endl;
 
-    std::cout << std::endl
-              << "final routes" << std::endl;
+    std::cout << std::endl << "final routes" << std::endl;
+    // FIXME consider generic approach
+    int tmp = 0;
     for (auto a : routes) {
-        if (a.second.size() > 3) {
+        if (valid[tmp++]) {
             for (auto b : a.second) {
                 std::cout << b << ' ';
             }
