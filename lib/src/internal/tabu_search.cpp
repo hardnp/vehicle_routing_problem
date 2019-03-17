@@ -1,8 +1,12 @@
 #include "tabu_search.h"
 #include "objective.h"
+
 #include "src/internal/tabu/local_search.h"
+#include "src/internal/tabu/tabu_lists.h"
 
 #include <cassert>
+#include <stdexcept>
+#include <unordered_map>
 
 namespace vrp {
 namespace detail {
@@ -13,6 +17,26 @@ static constexpr const uint32_t MAX_ITERS =
     std::numeric_limits<uint32_t>::max();
 static constexpr const uint32_t ROUTE_SAVING_ITERS = 5;
 static constexpr const uint32_t INTRA_RELOCATION_ITERS = 15;
+
+void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
+                       size_t i) {
+    switch (i) {
+    case 0:
+        lists.relocate = std::move(new_lists.relocate);
+        break;
+    case 1:
+        lists.relocate_split = std::move(new_lists.relocate_split);
+        break;
+    case 2:
+        lists.exchange = std::move(new_lists.exchange);
+        break;
+    case 3:
+        lists.two_opt = std::move(new_lists.two_opt);
+        break;
+    default:
+        throw std::out_of_range("tabu list index out of range");
+    }
+}
 }  // namespace
 
 Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
@@ -31,18 +55,26 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     assert(!best_sln.customer_owners.empty());
 
     std::vector<Solution> slns = {best_sln, best_sln, best_sln, best_sln};
+    tabu::TabuLists lists{};
     assert(slns.size() == ls.size());
 
     // i - iterations counter, can be reset if improvement found
     // ci - constant iterations counter, always counts forward
     for (uint32_t i = 0, ci = 0; i < TABU_SEARCH_ITERS && ci < MAX_ITERS;
          ++i, ++ci) {
+        auto updated_lists = lists;
         for (size_t m = 0; m < ls.size(); ++m) {
             // re-write current solution
-            ls[m](slns[m]);
+            ls[m](slns[m], updated_lists);
         }
+
         auto min_sln_it =
             std::min_element(slns.cbegin(), slns.cend(), sln_comp);
+
+        --lists;
+
+        update_tabu_lists(lists, updated_lists,
+                          std::distance(slns.cbegin(), min_sln_it));
 
         auto curr_sln = *min_sln_it;
 

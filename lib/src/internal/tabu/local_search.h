@@ -1,6 +1,7 @@
 #pragma once
 
 #include "solution.h"
+#include "tabu_lists.h"
 
 #include <cstdint>
 #include <functional>
@@ -11,7 +12,7 @@ namespace tabu {
 class LocalSearchMethods {
     const Problem& m_prob;
 
-    using methods_t = std::vector<std::function<void(Solution&)>>;
+    using methods_t = std::vector<std::function<void(Solution&, TabuLists&)>>;
     methods_t m_methods = methods_t(4);
 
 public:
@@ -27,11 +28,10 @@ public:
     size_t size() const;
     const methods_t::value_type& operator[](size_t i) const;
 
-    // TODO: return tabu move as well
-    void exchange(Solution& sln);
-    void relocate(Solution& sln);
-    void relocate_split(Solution& sln);
-    void two_opt(Solution& sln);
+    void exchange(Solution& sln, TabuLists& lists);
+    void relocate(Solution& sln, TabuLists& lists);
+    void relocate_split(Solution& sln, TabuLists& lists);
+    void two_opt(Solution& sln, TabuLists& lists);
 };
 }  // namespace tabu
 }  // namespace vrp

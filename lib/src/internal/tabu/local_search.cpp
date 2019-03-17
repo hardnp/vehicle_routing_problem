@@ -6,6 +6,7 @@
 #include <list>
 #include <stack>
 #include <stdexcept>
+#include <type_traits>
 #include <unordered_set>
 
 namespace vrp {
@@ -59,18 +60,40 @@ inline bool is_loop(const Solution::RouteType& route) {
     return *route.cbegin() == *std::next(route.cbegin(), 1);
 }
 
-void delete_loops(Solution& sln) {
+void delete_loops_after_relocate(Solution& sln, TabuLists& lists) {
     std::stack<decltype(sln.routes)::const_iterator> loop_indices;
     for (size_t ri = 0, size = sln.routes.size(); ri < size; ++ri) {
         if (is_loop(sln.routes[ri].second)) {
             loop_indices.push(sln.routes.cbegin() + ri);
         }
     }
+
+    auto& relocate_list = lists.relocate.all();
     while (!loop_indices.empty()) {
-        sln.routes.erase(loop_indices.top());
+        auto loop = loop_indices.top();
+
+        size_t ri = std::distance(sln.routes.cbegin(), loop);
+        std::decay_t<decltype(relocate_list)> fixed_relocate_list = {};
+        while (!relocate_list.empty()) {
+            auto entry = *relocate_list.begin();
+            relocate_list.erase(relocate_list.begin());
+            if (entry.value.second == ri) {
+                continue;
+            }
+            for (size_t i = ri + 1, size = sln.routes.size(); i < size; ++i) {
+                if (entry.value.second == i) {
+                    entry.value.second--;
+                    break;
+                }
+            }
+            fixed_relocate_list.emplace(entry);
+        }
+        relocate_list = std::move(fixed_relocate_list);
+
+        sln.routes.erase(loop);
         loop_indices.pop();
     }
-}
+}  // namespace
 
 /// calculate distance from first to last-1 on route. this is an oversimplified
 /// "objective function part"
@@ -113,14 +136,14 @@ inline void two_opt_swap(Solution::RouteType& route, size_t i, size_t k) {
 
 LocalSearchMethods::LocalSearchMethods(const Problem& prob) noexcept
     : m_prob(prob) {
-    m_methods[0] =
-        std::bind(&LocalSearchMethods::relocate, this, std::placeholders::_1);
+    m_methods[0] = std::bind(&LocalSearchMethods::relocate, this,
+                             std::placeholders::_1, std::placeholders::_2);
     m_methods[1] = std::bind(&LocalSearchMethods::relocate_split, this,
-                             std::placeholders::_1);
-    m_methods[2] =
-        std::bind(&LocalSearchMethods::exchange, this, std::placeholders::_1);
-    m_methods[3] =
-        std::bind(&LocalSearchMethods::two_opt, this, std::placeholders::_1);
+                             std::placeholders::_1, std::placeholders::_2);
+    m_methods[2] = std::bind(&LocalSearchMethods::exchange, this,
+                             std::placeholders::_1, std::placeholders::_2);
+    m_methods[3] = std::bind(&LocalSearchMethods::two_opt, this,
+                             std::placeholders::_1, std::placeholders::_2);
 }
 
 LocalSearchMethods::methods_t::iterator LocalSearchMethods::begin() {
@@ -151,7 +174,7 @@ operator[](size_t i) const {
 }
 
 // TODO: check constraints & tabu lists
-void LocalSearchMethods::relocate(Solution& sln) {
+void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
     const auto vehicles_size = m_prob.n_vehicles();
     std::unordered_set<Solution::VehicleIndex> unused_vehicles;
     assert(vehicles_size >= sln.used_vehicles.size());
@@ -178,6 +201,12 @@ void LocalSearchMethods::relocate(Solution& sln) {
             std::tie(r_out, n_index) = sln.customer_owners[neighbour];
             // do not relocate inside the same route
             if (r_in == r_out) {
+                continue;
+            }
+
+            // TODO: debug this is correct
+            // there's a tabu list entry for (customer, route id)
+            if (lists.relocate.has(customer, r_out)) {
                 continue;
             }
 
@@ -229,6 +258,7 @@ void LocalSearchMethods::relocate(Solution& sln) {
                 curr_best_value = value;
                 sln.update_customer_owners(m_prob, r_in);
                 sln.update_customer_owners(m_prob, r_out);
+                lists.relocate.emplace(customer, r_in);
                 // TODO: is break valid or we can improve further?
                 break;
             } else {
@@ -279,6 +309,7 @@ void LocalSearchMethods::relocate(Solution& sln) {
                 sln.update_customer_owners(m_prob, r_in);
                 sln.update_customer_owners(m_prob, sln.routes.size() - 1);
                 sln.used_vehicles.emplace(used_vehicle);
+                lists.relocate.emplace(customer, r_in);
             } else {
                 // move is bad - roll back the changes
                 route_in.insert(erased, customer);
@@ -287,13 +318,15 @@ void LocalSearchMethods::relocate(Solution& sln) {
             }
         }
     }
-    delete_loops(sln);
+    delete_loops_after_relocate(sln, lists);
     sln.update_customer_owners(m_prob);
 }
 
-void LocalSearchMethods::relocate_split(Solution& sln) { return; }
+void LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
+    return;
+}
 
-void LocalSearchMethods::exchange(Solution& sln) {
+void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
     auto curr_best_value = objective(m_prob, sln);
     const auto size = m_prob.n_customers();
     for (size_t customer = 1; customer < size; ++customer) {
@@ -310,6 +343,13 @@ void LocalSearchMethods::exchange(Solution& sln) {
             std::tie(r2, n_index) = sln.customer_owners[neighbour];
             // do not relocate inside the same route
             if (r1 == r2) {
+                continue;
+            }
+
+            // TODO: debug this is correct
+            // there's a tabu list entry for (customer, neighbour)
+            if (lists.exchange.has(customer, r2) ||
+                lists.exchange.has(neighbour, r1)) {
                 continue;
             }
 
@@ -338,6 +378,8 @@ void LocalSearchMethods::exchange(Solution& sln) {
                 curr_best_value = value;
                 sln.update_customer_owners(m_prob, r1);
                 sln.update_customer_owners(m_prob, r2);
+                lists.exchange.emplace(customer, r1);
+                lists.exchange.emplace(neighbour, r2);
                 // TODO: is break valid or we can improve further?
                 break;
             } else {
@@ -349,20 +391,27 @@ void LocalSearchMethods::exchange(Solution& sln) {
 }
 
 // TODO: check constraints & tabu lists
-void LocalSearchMethods::two_opt(Solution& sln) {
+void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
     auto curr_best_value = objective(m_prob, sln);
     for (size_t ri = 0; ri < sln.routes.size(); ++ri) {
         // depots are out of 2-opt scope, so we remove them
         auto route = std::move(remove_depots(sln.routes[ri].second));
 
-        bool can_improve =
-            route.size() > 2;  // there must be improvement options
+        // we can only improve routes consisting of 3+ nodes
+        bool can_improve = route.size() > 2;
         while (can_improve) {
             bool found_new_best = false;
             for (size_t i = 0; i < route.size() - 1; ++i) {
                 if (found_new_best)  // fast loop break
                     break;
+                auto ci = at(route, i);
                 for (size_t k = i + 1; k < route.size(); ++k) {
+                    auto ck = at(route, k);
+                    // there's a tabu list entry for (i, k)
+                    if (lists.two_opt.has(ci, ck)) {
+                        continue;
+                    }
+
                     auto old_route =
                         std::move(sln.routes[ri].second);  // save old sln
 
@@ -378,6 +427,11 @@ void LocalSearchMethods::two_opt(Solution& sln) {
                         curr_best_value = value;
                         route = std::move(route_copy);
                         found_new_best = true;
+                        // forbid arcs existing edges
+                        lists.two_opt.emplace(ci, at(route, i + 1));
+                        if (k + 1 < route.size()) {
+                            lists.two_opt.emplace(ck, at(route, k + 1));
+                        }
                         break;
                     } else {
                         // move is bad - roll back the changes
