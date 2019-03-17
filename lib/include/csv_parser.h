@@ -1,24 +1,26 @@
 #pragma once
 
+#include "objective.h"
 #include "problem.h"
 #include "solution.h"
 
+#include <istream>
+#include <limits>
+#include <ostream>
 #include <string>
 #include <vector>
-#include <fstream>
-#include <limits>
 
 namespace vrp {
 /// CSV file parser
 class CsvParser {
     const char m_delimiter = ';';
-    mutable std::ifstream m_csv_file;
+
 public:
-    CsvParser(const std::string& file_path, char delimiter = ';');
-    ~CsvParser();
+    CsvParser(char delimiter = ';');
 
-    Problem load_input() const;
+    Problem read(std::istream& in) const;
 
-    void save_output(const Solution& sln) const;
+    void write(std::ostream& out, const Problem& prob,
+               const Solution& sln) const;
 };
-}  // vrp
+}  // namespace vrp

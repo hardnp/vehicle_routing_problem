@@ -17,7 +17,8 @@ def parse_args():
     """Parse command-line arguments"""
     parser = argparse.ArgumentParser(
         description='Solomon to CSV instance converter')
-    parser.add_argument('instances', nargs='+', help='Solomon instance file(s)')
+    parser.add_argument('instances', nargs='+',
+                        help='Solomon instance file(s)')
     return parser.parse_args()
 
 
@@ -53,18 +54,20 @@ def parse_solomon_instance(io_stream):
 def write_table_customer(io_stream, customers):
     """Write table customer into provided stream"""
     io_stream.write('table customer\n')
-    io_stream.write('id;demand;hard_tw_begin;hard_tw_end;soft_tw_begin;')
+    io_stream.write(
+        'id;volume;weight;hard_tw_begin;hard_tw_end;soft_tw_begin;')
     io_stream.write('soft_tw_end;service_time;suitable_vehicles\n')
     for customer in customers:
-        row = customer[:1] + customer[3:6] + customer[4:6] + customer[6:7]
+        row = customer[:1] + customer[3:4] + customer[3:6] + customer[4:6] \
+            + customer[6:7]
         io_stream.write(';'.join(row) + '\n')
 
 
 def write_table_vehicles(io_stream, vnumber, vcapacity):
     """Write table vehicles into provided stream"""
     io_stream.write('table vehicle\n')
-    io_stream.write('id;capacity;weight;fixed_cost;variable_cost\n')
-    for i in range(1, vnumber+1):
+    io_stream.write('id;volume;weight;fixed_cost;variable_cost\n')
+    for i in range(0, vnumber):
         row = [i, vcapacity, vcapacity, 1.0, 1.0]
         row = [str(e) for e in row]
         io_stream.write(';'.join(row) + '\n')
@@ -111,7 +114,8 @@ def write_max_violated_soft_tw(io_stream):
 def main():
     """Main entry-point"""
     args = parse_args()
-    test_data = os.path.abspath(str(Path(__file__, '../../test_data/solomon/')))
+    test_data = os.path.abspath(
+        str(Path(__file__, '../../test_data/solomon/')))
     if not os.path.isdir(test_data):
         os.makedirs(test_data)
     for i, instance in enumerate(args.instances):
