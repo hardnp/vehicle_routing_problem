@@ -18,6 +18,7 @@ static constexpr const uint32_t TABU_SEARCH_ITERS = 100;
 static constexpr const uint32_t MAX_ITERS =
     std::numeric_limits<uint32_t>::max();
 static constexpr const uint32_t ROUTE_SAVING_ITERS = 5;
+static constexpr const uint32_t ROUTE_SAVING_THRESHOLD = 7;
 static constexpr const uint32_t INTRA_RELOCATION_ITERS = 15;
 
 void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
@@ -89,16 +90,31 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
             i = 0;
         }
 
-        if (i > INTRA_RELOCATION_ITERS) {
-            ls.intra_relocate(curr_sln_copy);
-            if (objective(prob, curr_sln_copy) < objective(prob, best_sln)) {
-                best_sln = std::move(curr_sln_copy);
-                i = 0;
-            }
+        const bool perform_route_saving = ci % ROUTE_SAVING_ITERS == 0;
+        const bool perform_intra_relocation = i > INTRA_RELOCATION_ITERS;
+
+        if (perform_route_saving) {
+            ls.route_save(curr_sln_copy, ROUTE_SAVING_THRESHOLD);
         }
-#if 0  // TODO: implement
-        if (ci % ROUTE_SAVING_ITERS == 0) {}
-#endif
+        if (perform_intra_relocation) {
+            ls.intra_relocate(curr_sln_copy);
+        }
+
+        // update all solutions to current best
+        for (auto& sln : slns) {
+            sln = curr_sln_copy;
+        }
+
+        // no additional improvements were performed
+        if (!perform_route_saving && !perform_intra_relocation) {
+            continue;
+        }
+
+        // TODO: is this needed or carry on without updating best?
+        if (objective(prob, curr_sln_copy) < objective(prob, best_sln)) {
+            best_sln = std::move(curr_sln_copy);
+            i = 0;
+        }
     }
 
     return best_sln;

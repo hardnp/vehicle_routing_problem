@@ -34,6 +34,7 @@ public:
     void two_opt(Solution& sln, TabuLists& lists);
 
     // additional heuristics:
+    void route_save(Solution& sln, size_t threshold);
     void intra_relocate(Solution& sln);
 };
 }  // namespace tabu

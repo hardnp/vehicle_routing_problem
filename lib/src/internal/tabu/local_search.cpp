@@ -447,6 +447,8 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
     sln.update_customer_owners(m_prob);
 }
 
+void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {}
+
 void LocalSearchMethods::intra_relocate(Solution& sln) {
     for (size_t ri = 0; ri < sln.routes.size(); ++ri) {
         auto vehicle = sln.routes[ri].first;
