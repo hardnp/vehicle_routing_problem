@@ -253,8 +253,8 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
 
             // decide whether move is good
             const auto value = objective(m_prob, sln);
-            // move is good
             if (value < curr_best_value) {
+                // move is good
                 curr_best_value = value;
                 sln.update_customer_owners(m_prob, r_in);
                 sln.update_customer_owners(m_prob, r_out);
@@ -303,8 +303,8 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
 
             // decide whether move is good
             const auto value = objective(m_prob, sln);
-            // move is good
             if (value < curr_best_value) {
+                // move is good
                 curr_best_value = value;
                 sln.update_customer_owners(m_prob, r_in);
                 sln.update_customer_owners(m_prob, sln.routes.size() - 1);
@@ -373,8 +373,8 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
 
             // decide whether move is good
             const auto value = objective(m_prob, sln);
-            // move is good
             if (value < curr_best_value) {
+                // move is good
                 curr_best_value = value;
                 sln.update_customer_owners(m_prob, r1);
                 sln.update_customer_owners(m_prob, r2);
@@ -422,8 +422,8 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
 
                     // decide whether move is good
                     const auto value = objective(m_prob, sln);
-                    // move is good
                     if (value < curr_best_value) {
+                        // move is good
                         curr_best_value = value;
                         route = std::move(route_copy);
                         found_new_best = true;
@@ -444,6 +444,38 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
             can_improve = found_new_best;
         }
     }
+    sln.update_customer_owners(m_prob);
+}
+
+void LocalSearchMethods::intra_relocate(Solution& sln) {
+    for (size_t ri = 0; ri < sln.routes.size(); ++ri) {
+        auto vehicle = sln.routes[ri].first;
+        auto& route = sln.routes[ri].second;
+        auto curr_best_value = objective(m_prob, vehicle, route);
+        for (auto pos = std::next(route.begin(), 1);
+             pos != std::next(route.end(), -1); ++pos) {
+            for (auto new_pos = std::next(route.begin(), 1);
+                 new_pos != std::next(route.end(), -1); ++new_pos) {
+                if (pos == new_pos) {
+                    continue;
+                }
+
+                // move customer to new position
+                std::swap(*pos, *new_pos);
+
+                // decide whether move is good
+                const auto value = objective(m_prob, vehicle, route);
+                if (value < curr_best_value) {
+                    // move is good
+                    curr_best_value = value;
+                } else {
+                    // move is bad - roll back the changes
+                    std::swap(*pos, *new_pos);
+                }
+            }
+        }
+    }
+    sln.update_customer_owners(m_prob);
 }
 }  // namespace tabu
 }  // namespace vrp

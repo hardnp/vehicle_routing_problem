@@ -32,6 +32,9 @@ public:
     void relocate(Solution& sln, TabuLists& lists);
     void relocate_split(Solution& sln, TabuLists& lists);
     void two_opt(Solution& sln, TabuLists& lists);
+
+    // additional heuristics:
+    void intra_relocate(Solution& sln);
 };
 }  // namespace tabu
 }  // namespace vrp

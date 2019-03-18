@@ -81,15 +81,23 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
 
         auto curr_sln = *min_sln_it;
 
+        auto curr_sln_copy = curr_sln;
+
         // found new best: reset best solution, reset iter counter to 0
         if (objective(prob, curr_sln) < objective(prob, best_sln)) {
             best_sln = std::move(curr_sln);
             i = 0;
         }
 
+        if (i > INTRA_RELOCATION_ITERS) {
+            ls.intra_relocate(curr_sln_copy);
+            if (objective(prob, curr_sln_copy) < objective(prob, best_sln)) {
+                best_sln = std::move(curr_sln_copy);
+                i = 0;
+            }
+        }
 #if 0  // TODO: implement
         if (ci % ROUTE_SAVING_ITERS == 0) {}
-        if (ci % INTRA_RELOCATION_ITERS == 0) {}
 #endif
     }
 
