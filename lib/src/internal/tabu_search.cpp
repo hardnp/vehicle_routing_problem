@@ -4,6 +4,8 @@
 #include "src/internal/tabu/local_search.h"
 #include "src/internal/tabu/tabu_lists.h"
 
+#include "threading.hpp"
+
 #include <cassert>
 #include <stdexcept>
 #include <unordered_map>
@@ -63,10 +65,11 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     for (uint32_t i = 0, ci = 0; i < TABU_SEARCH_ITERS && ci < MAX_ITERS;
          ++i, ++ci) {
         auto updated_lists = lists;
-        for (size_t m = 0; m < ls.size(); ++m) {
+        threading::parallel_for(ls.size(), [&](size_t m) {
+            // for (size_t m = 0; m < ls.size(); ++m) {
             // re-write current solution
             ls[m](slns[m], updated_lists);
-        }
+        });
 
         auto min_sln_it =
             std::min_element(slns.cbegin(), slns.cend(), sln_comp);

@@ -13,18 +13,18 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-function")
     # ignored due to cplex:
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-ignored-attributes")
+    set(WARN_FLAGS "-Wall -Werror")
     set(CMAKE_CXX_FLAGS_DEBUG
-        "${CMAKE_CXX_FLAGS} -Wall -Werror -g -O0")
+        "${CMAKE_CXX_FLAGS} ${WARN_FLAGS} -g -O0")
     set(CMAKE_CXX_FLAGS_RELEASE
-        "${CMAKE_CXX_FLAGS} -Wall -Werror -O3 -DNDEBUG")
+        "${CMAKE_CXX_FLAGS} ${WARN_FLAGS} -O3 -DNDEBUG")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-function")
     # ignored due to cplex:
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-ignored-attributes")
-    set(CMAKE_CXX_FLAGS_DEBUG
-        "${CMAKE_CXX_FLAGS} -Wall -Werror -g -O0")
-    set(CMAKE_CXX_FLAGS_RELEASE
-        "${CMAKE_CXX_FLAGS} -Wall -Werror -O3 -DNDEBUG")
+    set(WARN_FLAGS "-Wall -Werror")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${WARN_FLAGS} -g -O0")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${WARN_FLAGS} -O3 -DNDEBUG")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     set(CMAKE_CXX_FLAGS_DEBUG
         "${CMAKE_CXX_FLAGS} /Wall /WX /O0")
@@ -42,6 +42,14 @@ if (${WITH_CPLEX})
     message("CPLEX include directory: ${CPLEX_INCLUDE_DIR}")
     message("CONCERT include directory: ${CPLEX_CONCERT_INCLUDE_DIR}")
     message("CPLEX libraries: ${CPLEX_LIBRARIES}")
+endif()
+
+# find TBB if TBB is set
+option(WITH_TBB "Enable TBB library usage" OFF)
+if (${WITH_TBB})
+    include(tbb)
+    message("TBB include directory: ${TBB_INCLUDE_DIR}")
+    message("TBB libraries: ${TBB_LIBRARIES}")
 endif()
 
 # add directory with library
