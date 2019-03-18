@@ -1,7 +1,7 @@
 #include "csv_parser.h"
+#include "improvement_heuristics.h"
 #include "initial_heuristics.h"
 #include "objective.h"
-#include "optimal_solution.h"
 #include "solution.h"
 
 #include <algorithm>
@@ -86,8 +86,8 @@ int main(int argc, char* argv[]) {
     std::vector<vrp::Solution> improved_solutions = {};
     improved_solutions.reserve(solutions.size());
     for (const auto& sln : solutions) {
-        improved_solutions.emplace_back(std::move(create_optimal_solution(
-            problem, sln, vrp::OptimalHeuristic::Tabu)));
+        improved_solutions.emplace_back(std::move(create_improved_solution(
+            problem, sln, vrp::ImprovementHeuristic::Tabu)));
     }
 
     auto best_sln = *std::min_element(
