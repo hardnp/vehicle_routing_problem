@@ -214,7 +214,6 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
         }
     }
 
-    auto curr_best_value = objective(m_prob, sln);
     const auto size = m_prob.n_customers();
     for (size_t customer = 1; customer < size; ++customer) {
         // TODO: handle case when route not found - debug only?
@@ -262,7 +261,7 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                 m_prob.costs[customer][at(route_out, n_index + 1)];
 
             // if customer is closer to it's neighbours in __current__ route, do
-            // not relocate
+            // not relocate to neighbours in __new__ route
             if (customer_value < customer_before_neighbour_value &&
                 customer_value < customer_after_neighbour_value) {
                 continue;
@@ -270,25 +269,39 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
 
             // we assume there's a better place for our customer at this point
 
+            auto it_in_before = atit(route_in, c_index - 1),
+                 it_in_after = atit(route_in, c_index + 1),
+                 it_out_before = atit(route_out, n_index - 1),
+                 it_out_after = atit(route_out, n_index + 1);
+
+            const auto cost_before =
+                distance_on_route(m_prob, it_in_before,
+                                  std::next(it_in_after, 1)) +
+                distance_on_route(m_prob, it_out_before,
+                                  std::next(it_out_after, 1));
+
             Solution::RouteType::iterator inserted, erased;
             if (customer_before_neighbour_value <
                 customer_after_neighbour_value) {
-                inserted = route_out.insert(atit(route_out, n_index), customer);
-            } else {
                 inserted =
-                    route_out.insert(atit(route_out, n_index + 1), customer);
+                    route_out.insert(std::next(it_out_before, 1), customer);
+            } else {
+                inserted = route_out.insert(it_out_after, customer);
             }
-            erased = route_in.erase(atit(route_in, c_index));
+            erased = route_in.erase(std::next(it_in_before, 1));
+
+            const auto cost_after =
+                distance_on_route(m_prob, it_in_before,
+                                  std::next(it_in_after, 1)) +
+                distance_on_route(m_prob, it_out_before,
+                                  std::next(it_out_after, 1));
 
             // decide whether move is good
-            const auto value = objective(m_prob, sln);
-            if (value < curr_best_value) {
+            if (cost_after < cost_before) {
                 // move is good
-                curr_best_value = value;
                 sln.update_customer_owners(m_prob, r_in);
                 sln.update_customer_owners(m_prob, r_out);
                 lists.relocate.emplace(customer, r_in);
-                // TODO: is break valid or we can improve further?
                 break;
             } else {
                 // move is bad - roll back the changes
@@ -328,13 +341,25 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
             // we assume there's a suitable vehicle at this point
 
             auto& route_in = sln.routes[r_in].second;
-            auto erased = route_in.erase(atit(route_in, c_index));
+
+            auto it_in_before = atit(route_in, c_index - 1),
+                 it_in_after = atit(route_in, c_index + 1),
+                 it_out = atit(sln.routes.back().second, 1);
+
+            const auto cost_before = distance_on_route(
+                m_prob, it_in_before, std::next(it_in_after, 1));
+
+            auto erased = route_in.erase(std::next(it_in_before, 1));
+
+            const auto cost_after =
+                distance_on_route(m_prob, it_in_before,
+                                  std::next(it_in_after, 1)) +
+                distance_on_route(m_prob, std::prev(it_out, 1),
+                                  std::next(it_out, 2));
 
             // decide whether move is good
-            const auto value = objective(m_prob, sln);
-            if (value < curr_best_value) {
+            if (cost_after < cost_before) {
                 // move is good
-                curr_best_value = value;
                 sln.update_customer_owners(m_prob, r_in);
                 sln.update_customer_owners(m_prob, sln.routes.size() - 1);
                 sln.used_vehicles.emplace(used_vehicle);
@@ -349,7 +374,7 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
     }
     delete_loops_after_relocate(sln, lists);
     sln.update_customer_owners(m_prob);
-}
+}  // namespace tabu
 
 void LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
     return;
@@ -408,7 +433,6 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
                 sln.update_customer_owners(m_prob, r2);
                 lists.exchange.emplace(customer, r1);
                 lists.exchange.emplace(neighbour, r2);
-                // TODO: is break valid or we can improve further?
                 break;
             } else {
                 // move is bad - roll back the changes
