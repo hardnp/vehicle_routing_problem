@@ -479,9 +479,9 @@ void LocalSearchMethods::intra_relocate(Solution& sln) {
         auto& route = sln.routes[ri].second;
         auto curr_best_value = objective(m_prob, vehicle, route);
         for (auto pos = std::next(route.begin(), 1);
-             pos != std::next(route.end(), -1); ++pos) {
+             pos != std::prev(route.end(), 1); ++pos) {
             for (auto new_pos = std::next(route.begin(), 1);
-                 new_pos != std::next(route.end(), -1); ++new_pos) {
+                 new_pos != std::prev(route.end(), 1); ++new_pos) {
                 if (pos == new_pos) {
                     continue;
                 }
