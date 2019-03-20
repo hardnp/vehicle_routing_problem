@@ -13,7 +13,6 @@ namespace vrp {
 namespace tabu {
 namespace {
 
-// return if customer and vehicle are site-dependent. true if vehicle can
 // deliver to customer, false otherwise
 inline bool site_dependent(const Problem& prob, size_t vehicle,
                            size_t customer) {
@@ -110,6 +109,20 @@ inline double distance_on_route(const Problem& prob,
     return distance;
 }
 
+template<typename ListIt>
+inline double distance_on_route(const Problem& prob, ListIt first,
+                                ListIt last) {
+    if (first == last) {
+        throw std::runtime_error("empty range provided");
+    }
+    double distance = 0.0;
+    auto next_first = std::next(first);
+    for (; next_first != last; ++first, ++next_first) {
+        distance += prob.costs[*first][*next_first];
+    }
+    return distance;
+}
+
 inline Solution::RouteType remove_depots(const Solution::RouteType& route) {
     auto copy = route;
     copy.pop_front();
@@ -132,6 +145,12 @@ inline void two_opt_swap(Solution::RouteType& route, size_t i, size_t k) {
     const auto begin = std::next(route.begin(), i),
                end = std::next(route.begin(), k + 1);
     std::reverse(begin, end);
+}
+
+template<typename ListIt>
+inline void two_opt_swap(Solution::RouteType& route, ListIt first,
+                         ListIt last) {
+    std::reverse(first, last);
 }
 }  // namespace
 
@@ -393,50 +412,52 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
 
 // TODO: check constraints & tabu lists
 void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
-    auto curr_best_value = objective(m_prob, sln);
     for (size_t ri = 0; ri < sln.routes.size(); ++ri) {
-        // depots are out of 2-opt scope, so we remove them
-        auto route = std::move(remove_depots(sln.routes[ri].second));
+        auto& route = sln.routes[ri].second;
 
-        // we can only improve routes consisting of 3+ nodes
+        // we can only improve routes that have 3+ nodes
         bool can_improve = route.size() > 2;
         while (can_improve) {
             bool found_new_best = false;
-            for (size_t i = 0; i < route.size() - 1; ++i) {
+            // skip depots && beware of k = i + 1
+            for (auto i = std::next(route.begin(), 1);
+                 i != std::prev(route.end(), 2); ++i) {
                 if (found_new_best)  // fast loop break
                     break;
-                auto ci = at(route, i);
-                for (size_t k = i + 1; k < route.size(); ++k) {
-                    auto ck = at(route, k);
+                // skip depots && start from i + 1
+                for (auto k = std::next(i, 1); k != std::prev(route.end(), 1);
+                     ++k) {
                     // there's a tabu list entry for (i, k)
-                    if (lists.two_opt.has(ci, ck)) {
+                    if (lists.two_opt.has(*i, *k)) {
                         continue;
                     }
 
-                    auto old_route =
-                        std::move(sln.routes[ri].second);  // save old sln
-
-                    // perform 2-opt on solution
-                    auto route_copy = route;
-                    two_opt_swap(route_copy, i, k);
-                    sln.routes[ri].second = std::move(add_depots(route_copy));
+                    // cost before: (i-1)->i->(i+1) + (k-1)->k->(k+1)
+                    const auto cost_before =
+                        distance_on_route(m_prob, std::prev(i, 1),
+                                          std::next(i, 2)) +
+                        distance_on_route(m_prob, std::prev(k, 1),
+                                          std::next(k, 2));
+                    // perform 2-opt
+                    std::reverse(i, std::next(k, 1));
+                    // cost after: (i-1)->k->(i+1) + (k-1)->i->(k+1)
+                    const auto cost_after =
+                        distance_on_route(m_prob, std::prev(i, 1),
+                                          std::next(i, 2)) +
+                        distance_on_route(m_prob, std::prev(k, 1),
+                                          std::next(k, 2));
 
                     // decide whether move is good
-                    const auto value = objective(m_prob, sln);
-                    if (value < curr_best_value) {
+                    if (cost_after < cost_before) {
                         // move is good
-                        curr_best_value = value;
-                        route = std::move(route_copy);
                         found_new_best = true;
                         // forbid previously existing edges
-                        lists.two_opt.emplace(ci, at(route, i + 1));
-                        if (k + 1 < route.size()) {
-                            lists.two_opt.emplace(ck, at(route, k + 1));
-                        }
+                        lists.two_opt.emplace(*i, *std::next(i, 1));
+                        lists.two_opt.emplace(*k, *std::next(k, 1));
                         break;
                     } else {
                         // move is bad - roll back the changes
-                        sln.routes[ri].second = std::move(old_route);
+                        std::reverse(i, std::next(k, 1));
                     }
                 }
             }
