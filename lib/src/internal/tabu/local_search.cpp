@@ -123,6 +123,15 @@ inline double distance_on_route(const Problem& prob, ListIt first,
     return distance;
 }
 
+// calculate distance for a pair of "independent" iterators: dist(i-1, i+1) +
+// dist(k-1, k+1), where: (i-1)->(i)->(i+1) && (k-1)->(k)->(k+1)
+template<typename ListIt>
+inline double paired_distance_on_route(const Problem& prob, ListIt i,
+                                       ListIt k) {
+    return distance_on_route(prob, std::prev(i, 1), std::next(i, 2)) +
+           distance_on_route(prob, std::prev(k, 1), std::next(k, 2));
+}
+
 inline Solution::RouteType remove_depots(const Solution::RouteType& route) {
     auto copy = route;
     copy.pop_front();
@@ -347,7 +356,6 @@ void LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
 }
 
 void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
-    auto curr_best_value = objective(m_prob, sln);
     const auto size = m_prob.n_customers();
     for (size_t customer = 1; customer < size; ++customer) {
         // TODO: handle case when route not found - debug only?
@@ -389,13 +397,13 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
 
             // perform exchange (just swap customer indices)
             auto it1 = atit(route1, c_index), it2 = atit(route2, n_index);
+            const auto cost_before = paired_distance_on_route(m_prob, it1, it2);
             std::swap(*it1, *it2);
+            const auto cost_after = paired_distance_on_route(m_prob, it1, it2);
 
             // decide whether move is good
-            const auto value = objective(m_prob, sln);
-            if (value < curr_best_value) {
+            if (cost_after < cost_before) {
                 // move is good
-                curr_best_value = value;
                 sln.update_customer_owners(m_prob, r1);
                 sln.update_customer_owners(m_prob, r2);
                 lists.exchange.emplace(customer, r1);
@@ -434,18 +442,12 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
 
                     // cost before: (i-1)->i->(i+1) + (k-1)->k->(k+1)
                     const auto cost_before =
-                        distance_on_route(m_prob, std::prev(i, 1),
-                                          std::next(i, 2)) +
-                        distance_on_route(m_prob, std::prev(k, 1),
-                                          std::next(k, 2));
+                        paired_distance_on_route(m_prob, i, k);
                     // perform 2-opt
                     std::reverse(i, std::next(k, 1));
                     // cost after: (i-1)->k->(i+1) + (k-1)->i->(k+1)
                     const auto cost_after =
-                        distance_on_route(m_prob, std::prev(i, 1),
-                                          std::next(i, 2)) +
-                        distance_on_route(m_prob, std::prev(k, 1),
-                                          std::next(k, 2));
+                        paired_distance_on_route(m_prob, i, k);
 
                     // decide whether move is good
                     if (cost_after < cost_before) {
