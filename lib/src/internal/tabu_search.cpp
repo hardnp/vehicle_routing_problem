@@ -91,11 +91,6 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
             i = 0;
         }
 
-#ifndef NDEBUG
-        LOG_INFO << "Violated time windows: "
-                 << constraints::total_violated_time(prob, best_sln) << EOL;
-#endif
-
         const bool perform_route_saving = ci % ROUTE_SAVING_ITERS == 0;
         const bool perform_intra_relocation = i > INTRA_RELOCATION_ITERS;
 

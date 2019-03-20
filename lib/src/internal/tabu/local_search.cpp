@@ -95,17 +95,16 @@ void delete_loops_after_relocate(Solution& sln, TabuLists& lists) {
     }
 }  // namespace
 
-/// calculate distance from first to last-1 on route. this is an oversimplified
-/// "objective function part"
+/// calculate route distance. this is an oversimplified "objective function
+/// part"
 inline double distance_on_route(const Problem& prob,
                                 const Solution::RouteType& route, size_t first,
                                 size_t last) {
     if (first > last || first > route.size()) {
         throw std::out_of_range("invalid indices");
     }
-    --last;
     double distance = 0.0;
-    for (; first != last; ++first) {
+    for (; first + 1 != last; ++first) {
         distance += prob.costs[at(route, first)][at(route, first + 1)];
     }
     return distance;
@@ -130,7 +129,9 @@ inline void two_opt_swap(Solution::RouteType& route, size_t i, size_t k) {
     if (i >= route.size() || k >= route.size()) {
         throw std::out_of_range("index >= size");
     }
-    std::reverse(std::next(route.begin(), i), std::next(route.begin(), k + 1));
+    const auto begin = std::next(route.begin(), i),
+               end = std::next(route.begin(), k + 1);
+    std::reverse(begin, end);
 }
 }  // namespace
 
@@ -427,7 +428,7 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
                         curr_best_value = value;
                         route = std::move(route_copy);
                         found_new_best = true;
-                        // forbid arcs existing edges
+                        // forbid previously existing edges
                         lists.two_opt.emplace(ci, at(route, i + 1));
                         if (k + 1 < route.size()) {
                             lists.two_opt.emplace(ck, at(route, k + 1));
