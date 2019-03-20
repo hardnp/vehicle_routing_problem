@@ -499,9 +499,7 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {}
 
 void LocalSearchMethods::intra_relocate(Solution& sln) {
     for (size_t ri = 0; ri < sln.routes.size(); ++ri) {
-        auto vehicle = sln.routes[ri].first;
         auto& route = sln.routes[ri].second;
-        auto curr_best_value = objective(m_prob, vehicle, route);
         for (auto pos = std::next(route.begin(), 1);
              pos != std::prev(route.end(), 1); ++pos) {
             for (auto new_pos = std::next(route.begin(), 1);
@@ -510,15 +508,15 @@ void LocalSearchMethods::intra_relocate(Solution& sln) {
                     continue;
                 }
 
+                const auto cost_before =
+                    distance_on_route(m_prob, route.begin(), route.end());
                 // move customer to new position
                 std::swap(*pos, *new_pos);
+                const auto cost_after =
+                    distance_on_route(m_prob, route.begin(), route.end());
 
                 // decide whether move is good
-                const auto value = objective(m_prob, vehicle, route);
-                if (value < curr_best_value) {
-                    // move is good
-                    curr_best_value = value;
-                } else {
+                if (cost_after >= cost_before) {
                     // move is bad - roll back the changes
                     std::swap(*pos, *new_pos);
                 }
