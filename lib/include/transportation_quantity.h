@@ -61,5 +61,11 @@ public:
         // true if both volume and weight != 0, false otherwise
         return this->volume != 0 && this->weight != 0;
     }
+
+    inline TransportationQuantity operator+(TransportationQuantity other) const
+        noexcept {
+        return TransportationQuantity{this->volume + other.volume,
+                                      this->weight + other.weight};
+    }
 };
 }  // namespace vrp

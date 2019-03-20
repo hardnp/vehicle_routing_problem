@@ -1,4 +1,5 @@
 #include "tabu_search.h"
+#include "constraints.h"
 #include "objective.h"
 
 #include "src/internal/tabu/local_search.h"
@@ -110,7 +111,6 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
             continue;
         }
 
-        // TODO: is this needed or carry on without updating best?
         if (objective(prob, curr_sln_copy) < objective(prob, best_sln)) {
             best_sln = std::move(curr_sln_copy);
             i = 0;

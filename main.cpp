@@ -1,3 +1,4 @@
+#include "constraints.h"
 #include "csv_parser.h"
 #include "improvement_heuristics.h"
 #include "initial_heuristics.h"
@@ -80,6 +81,10 @@ int main(int argc, char* argv[]) {
         [&problem](const auto& a, const auto& b) {
             return objective(problem, a) < objective(problem, b);
         });
+    LOG_INFO << "Initial solution satisfies Site-Dependency: "
+             << vrp::constraints::satisfies_site_dependency(problem,
+                                                            best_initial_sln)
+             << EOL;
     LOG_INFO << "Objective = " << objective(problem, best_initial_sln) << EOL;
 #endif
 
@@ -101,6 +106,9 @@ int main(int argc, char* argv[]) {
     parser.write(std::cout, problem, best_sln);
 
 #ifndef NDEBUG
+    LOG_INFO << "Improved solution satisfies Site-Dependency: "
+             << vrp::constraints::satisfies_site_dependency(problem, best_sln)
+             << EOL;
     LOG_INFO << "Objective = " << objective(problem, best_sln) << EOL;
 #endif
 
