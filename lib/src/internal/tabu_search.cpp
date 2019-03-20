@@ -1,11 +1,11 @@
 #include "tabu_search.h"
 #include "constraints.h"
+#include "logging.h"
 #include "objective.h"
+#include "threading.h"
 
 #include "src/internal/tabu/local_search.h"
 #include "src/internal/tabu/tabu_lists.h"
-
-#include "threading.hpp"
 
 #include <cassert>
 #include <stdexcept>
@@ -90,6 +90,11 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
             best_sln = std::move(curr_sln);
             i = 0;
         }
+
+#ifndef NDEBUG
+        LOG_INFO << "Violated time windows: "
+                 << constraints::total_violated_time(prob, best_sln) << EOL;
+#endif
 
         const bool perform_route_saving = ci % ROUTE_SAVING_ITERS == 0;
         const bool perform_intra_relocation = i > INTRA_RELOCATION_ITERS;

@@ -1,8 +1,8 @@
 #include "cluster_first_route_second.h"
+#include "logging.h"
 
 #include <algorithm>
 #include <cassert>
-#include <iostream>
 #include <list>
 #include <numeric>
 #include <random>
@@ -16,18 +16,6 @@ using namespace std;
 
 /// Specify that the variable x is unused in the code
 #define UNUSED(x) (void)x
-
-/// INFO stream
-#define LOG_INFO std::cout << "[INFO] "
-
-/// ERROR stream
-#define LOG_ERROR std::cerr << "[ERROR] "
-
-/// End of line, without stream flushing
-#define EOL "\n"
-
-/// End of line, with stream flushing
-#define EOL_FLUSH std::endl
 
 namespace vrp {
 namespace detail {

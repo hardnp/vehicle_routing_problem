@@ -2,27 +2,15 @@
 #include "csv_parser.h"
 #include "improvement_heuristics.h"
 #include "initial_heuristics.h"
+#include "logging.h"
 #include "objective.h"
 #include "solution.h"
 
 #include <algorithm>
 #include <fstream>
-#include <iostream>
 #include <iterator>
 #include <sstream>
 #include <string>
-
-/// INFO stream
-#define LOG_INFO std::cout << "[INFO] "
-
-/// ERROR stream
-#define LOG_ERROR std::cerr << "[ERROR] "
-
-/// End of line, without stream flushing
-#define EOL "\n"
-
-/// End of line, with stream flushing
-#define EOL_FLUSH std::endl
 
 namespace {
 class FileHandler {
