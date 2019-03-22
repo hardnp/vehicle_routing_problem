@@ -73,6 +73,10 @@ int main(int argc, char* argv[]) {
              << vrp::constraints::satisfies_site_dependency(problem,
                                                             best_initial_sln)
              << EOL;
+    LOG_INFO << "Initial solution satisfies Time Windows: "
+             << vrp::constraints::satisfies_time_windows(problem,
+                                                         best_initial_sln)
+             << EOL;
     LOG_INFO << "Objective = " << objective(problem, best_initial_sln) << EOL;
 #endif
 
@@ -96,6 +100,9 @@ int main(int argc, char* argv[]) {
 #ifndef NDEBUG
     LOG_INFO << "Improved solution satisfies Site-Dependency: "
              << vrp::constraints::satisfies_site_dependency(problem, best_sln)
+             << EOL;
+    LOG_INFO << "Improved solution satisfies Time Windows: "
+             << vrp::constraints::satisfies_time_windows(problem, best_sln)
              << EOL;
     LOG_INFO << "Objective = " << objective(problem, best_sln) << EOL;
 #endif

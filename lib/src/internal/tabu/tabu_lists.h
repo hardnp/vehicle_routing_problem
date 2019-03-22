@@ -15,7 +15,8 @@
 namespace vrp {
 namespace tabu {
 
-#define USE_HASH_SET 1
+// TODO: will this work for asymmetric cases: (customer, route) pairs?
+#define USE_HASH_SET 0
 
 template<typename T, int Tenure = 0> class TabuList {
     struct Hash;
@@ -32,12 +33,19 @@ template<typename T, int Tenure = 0> class TabuList {
         bool operator<(const Entry& other) const {
             return f(value) < f(other.value);
         }
+        bool operator==(const T& other_value) const {
+            return f(value) == f(other_value);
+        }
     };
 
     struct Hash {
-        size_t operator()(const Entry& e) const {
+#if USE_HASH_SET
+        inline size_t operator()(const Entry& e) const {
             return e.value.first ^ e.value.second;
         }
+#else
+        inline T operator()(const Entry& e) const { return e.value; }
+#endif
     };
 
 #if USE_HASH_SET
@@ -96,11 +104,8 @@ public:
     }
 
     template<typename... Args> bool has(Args&&... args) {
-        T t = T(std::forward<Args>(args)...);
-        return std::find_if(entries.cbegin(), entries.cend(),
-                            [&t](const Entry& entry) {
-                                return entry.value == t;
-                            }) != entries.cend();
+        return std::find(entries.cbegin(), entries.cend(),
+                         T(std::forward<Args>(args)...)) != entries.cend();
     }
 
     set_t& all() { return entries; }

@@ -1,9 +1,9 @@
 #include "cluster_first_route_second.h"
 
 #if !NO_CPLEX_IMPL
-#include "cfrs_cplex_inl.hpp"
+#include "cfrs_cplex_inl.h"
 #else
-#include "stub_cfrs_cplex_inl.hpp"
+#include "stub_cfrs_cplex_inl.h"
 #endif
 
 namespace vrp {

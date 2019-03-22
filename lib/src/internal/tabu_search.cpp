@@ -8,6 +8,7 @@
 #include "src/internal/tabu/tabu_lists.h"
 
 #include <cassert>
+#include <cmath>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -21,6 +22,7 @@ static constexpr const uint32_t MAX_ITERS =
 static constexpr const uint32_t ROUTE_SAVING_ITERS = 5;
 static constexpr const uint32_t ROUTE_SAVING_THRESHOLD = 7;
 static constexpr const uint32_t INTRA_RELOCATION_ITERS = 15;
+static constexpr const double TIME_WINDOWS_PENALTY_BASE = 1.2;
 
 void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
                        size_t i) {
@@ -62,10 +64,16 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     tabu::TabuLists lists{};
     assert(slns.size() == ls.size());
 
+    int tw_violation_count = 1;
+
     // i - iterations counter, can be reset if improvement found
     // ci - constant iterations counter, always counts forward
     for (uint32_t i = 0, ci = 0; i < TABU_SEARCH_ITERS && ci < MAX_ITERS;
          ++i, ++ci) {
+
+        ls.set_tw_penalty(
+            std::pow(TIME_WINDOWS_PENALTY_BASE, tw_violation_count));
+
         auto updated_lists = lists;
         threading::parallel_for(ls.size(), [&](size_t m) {
             // for (size_t m = 0; m < ls.size(); ++m) {
@@ -82,6 +90,14 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
                           std::distance(slns.cbegin(), min_sln_it));
 
         auto curr_sln = *min_sln_it;
+
+        // penalize for time windows violation
+        if (!constraints::satisfies_time_windows(prob, curr_sln)) {
+            ++tw_violation_count;
+        } else {
+            tw_violation_count = 0;
+            ls.set_tw_penalty(0.0);
+        }
 
         auto curr_sln_copy = curr_sln;
 

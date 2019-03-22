@@ -1,9 +1,14 @@
 #include "local_search.h"
+#include "constraints.h"
 #include "objective.h"
+
+#include "logging.h"
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <list>
+#include <numeric>
 #include <stack>
 #include <stdexcept>
 #include <type_traits>
@@ -13,7 +18,7 @@ namespace vrp {
 namespace tabu {
 namespace {
 
-// deliver to customer, false otherwise
+// true if vehicle can deliver to customer, false otherwise
 inline bool site_dependent(const Problem& prob, size_t vehicle,
                            size_t customer) {
     if (customer >= prob.allowed_vehicles_size()) {
@@ -43,10 +48,55 @@ inline Solution::RouteType::iterator atit(Solution::RouteType& route,
 
 inline Solution::RouteType::const_iterator
 atit(const Solution::RouteType& route, size_t i) {
-    if (i >= route.size()) {
+    if (i > route.size()) {
         throw std::out_of_range("i >= route size");
     }
     return std::next(route.cbegin(), i);
+}
+
+template<typename ListIt>
+inline double violated_time(const Problem& prob, double penalty, ListIt first,
+                            ListIt last) {
+    return penalty * (constraints::total_violated_time(prob, first, last));
+}
+
+/// calculate route distance. this is an oversimplified "objective function
+/// part"
+template<typename ListIt>
+inline double distance_on_route(const Problem& prob, double penalty,
+                                ListIt first, ListIt last) {
+    if (first == last) {
+        throw std::runtime_error("empty range provided");
+    }
+
+    double distance = violated_time(prob, penalty, first, last);
+
+    auto next_first = std::next(first);
+    for (; next_first != last; ++first, ++next_first) {
+        distance += prob.costs[*first][*next_first];
+    }
+
+    return distance;
+}
+
+inline double distance_on_route(const Problem& prob, double penalty,
+                                const Solution::RouteType& route,
+                                size_t first_i, size_t last_i) {
+    // FIXME: always use iterator version, remove this one
+    if (first_i > last_i || first_i > route.size()) {
+        throw std::out_of_range("invalid indices");
+    }
+    return distance_on_route(prob, penalty, atit(route, first_i),
+                             atit(route, last_i));
+}
+
+// calculate distance for a pair of "independent" iterators: dist(i-1, i+1) +
+// dist(k-1, k+1), where: (i-1)->(i)->(i+1) && (k-1)->(k)->(k+1)
+template<typename ListIt>
+inline double paired_distance_on_route(const Problem& prob, double penalty,
+                                       ListIt i, ListIt k) {
+    return distance_on_route(prob, penalty, std::prev(i), std::next(i, 2)) +
+           distance_on_route(prob, penalty, std::prev(k), std::next(k, 2));
 }
 
 inline bool is_loop(const Solution::RouteType& route) {
@@ -56,7 +106,7 @@ inline bool is_loop(const Solution::RouteType& route) {
     if (route.size() <= 1) {  // is indeed loop or just empty
         return true;
     }
-    return *route.cbegin() == *std::next(route.cbegin(), 1);
+    return *route.cbegin() == *std::next(route.cbegin());
 }
 
 void delete_loops_after_relocate(Solution& sln, TabuLists& lists) {
@@ -94,44 +144,6 @@ void delete_loops_after_relocate(Solution& sln, TabuLists& lists) {
     }
 }  // namespace
 
-/// calculate route distance. this is an oversimplified "objective function
-/// part"
-inline double distance_on_route(const Problem& prob,
-                                const Solution::RouteType& route, size_t first,
-                                size_t last) {
-    if (first > last || first > route.size()) {
-        throw std::out_of_range("invalid indices");
-    }
-    double distance = 0.0;
-    for (; first + 1 != last; ++first) {
-        distance += prob.costs[at(route, first)][at(route, first + 1)];
-    }
-    return distance;
-}
-
-template<typename ListIt>
-inline double distance_on_route(const Problem& prob, ListIt first,
-                                ListIt last) {
-    if (first == last) {
-        throw std::runtime_error("empty range provided");
-    }
-    double distance = 0.0;
-    auto next_first = std::next(first);
-    for (; next_first != last; ++first, ++next_first) {
-        distance += prob.costs[*first][*next_first];
-    }
-    return distance;
-}
-
-// calculate distance for a pair of "independent" iterators: dist(i-1, i+1) +
-// dist(k-1, k+1), where: (i-1)->(i)->(i+1) && (k-1)->(k)->(k+1)
-template<typename ListIt>
-inline double paired_distance_on_route(const Problem& prob, ListIt i,
-                                       ListIt k) {
-    return distance_on_route(prob, std::prev(i, 1), std::next(i, 2)) +
-           distance_on_route(prob, std::prev(k, 1), std::next(k, 2));
-}
-
 inline Solution::RouteType remove_depots(const Solution::RouteType& route) {
     auto copy = route;
     copy.pop_front();
@@ -145,21 +157,6 @@ inline Solution::RouteType add_depots(const Solution::RouteType& route) {
     copy.emplace_front(depot);
     copy.emplace_back(depot);
     return copy;
-}
-
-inline void two_opt_swap(Solution::RouteType& route, size_t i, size_t k) {
-    if (i >= route.size() || k >= route.size()) {
-        throw std::out_of_range("index >= size");
-    }
-    const auto begin = std::next(route.begin(), i),
-               end = std::next(route.begin(), k + 1);
-    std::reverse(begin, end);
-}
-
-template<typename ListIt>
-inline void two_opt_swap(Solution::RouteType& route, ListIt first,
-                         ListIt last) {
-    std::reverse(first, last);
 }
 }  // namespace
 
@@ -204,6 +201,8 @@ operator[](size_t i) const {
 
 // TODO: check constraints & tabu lists
 void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
+    static double best_ever_value = std::numeric_limits<double>::max();
+
     const auto vehicles_size = m_prob.n_vehicles();
     std::unordered_set<Solution::VehicleIndex> unused_vehicles;
     assert(vehicles_size >= sln.used_vehicles.size());
@@ -232,12 +231,6 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                 continue;
             }
 
-            // TODO: debug this is correct
-            // there's a tabu list entry for (customer, route id)
-            if (lists.relocate.has(customer, r_out)) {
-                continue;
-            }
-
             auto& route_out = sln.routes[r_out].second;
             if (is_loop(route_out)) {
                 continue;
@@ -249,8 +242,8 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
 
             // customer value represents the length of route i -> j, where:
             // ... -> (i -> customer -> j) -> ...
-            const auto customer_value =
-                distance_on_route(m_prob, route_in, c_index - 1, c_index + 2);
+            const auto customer_value = distance_on_route(
+                m_prob, 0, route_in, c_index - 1, c_index + 2);
             const auto customer_neighbour_distance =
                 m_prob.costs[customer][neighbour];
             const auto customer_before_neighbour_value =
@@ -275,33 +268,38 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                  it_out_after = atit(route_out, n_index + 1);
 
             const auto cost_before =
-                distance_on_route(m_prob, it_in_before,
-                                  std::next(it_in_after, 1)) +
-                distance_on_route(m_prob, it_out_before,
-                                  std::next(it_out_after, 1));
+                distance_on_route(m_prob, m_tw_penalty, it_in_before,
+                                  std::next(it_in_after)) +
+                distance_on_route(m_prob, m_tw_penalty, it_out_before,
+                                  std::next(it_out_after));
 
             Solution::RouteType::iterator inserted, erased;
             if (customer_before_neighbour_value <
                 customer_after_neighbour_value) {
-                inserted =
-                    route_out.insert(std::next(it_out_before, 1), customer);
+                inserted = route_out.insert(std::next(it_out_before), customer);
             } else {
                 inserted = route_out.insert(it_out_after, customer);
             }
-            erased = route_in.erase(std::next(it_in_before, 1));
+            erased = route_in.erase(std::next(it_in_before));
 
             const auto cost_after =
-                distance_on_route(m_prob, it_in_before,
-                                  std::next(it_in_after, 1)) +
-                distance_on_route(m_prob, it_out_before,
-                                  std::next(it_out_after, 1));
+                distance_on_route(m_prob, m_tw_penalty, it_in_before,
+                                  std::next(it_in_after)) +
+                distance_on_route(m_prob, m_tw_penalty, it_out_before,
+                                  std::next(it_out_after));
+
+            // aspiration criteria
+            const bool impossible_move = lists.relocate.has(customer, r_out) &&
+                                         cost_after >= best_ever_value;
 
             // decide whether move is good
-            if (cost_after < cost_before) {
+            if (!impossible_move && cost_after < cost_before) {
                 // move is good
                 sln.update_customer_owners(m_prob, r_in);
                 sln.update_customer_owners(m_prob, r_out);
                 lists.relocate.emplace(customer, r_in);
+
+                best_ever_value = std::min(best_ever_value, cost_after);
                 break;
             } else {
                 // move is bad - roll back the changes
@@ -347,14 +345,14 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                  it_out = atit(sln.routes.back().second, 1);
 
             const auto cost_before = distance_on_route(
-                m_prob, it_in_before, std::next(it_in_after, 1));
+                m_prob, m_tw_penalty, it_in_before, std::next(it_in_after));
 
-            auto erased = route_in.erase(std::next(it_in_before, 1));
+            auto erased = route_in.erase(std::next(it_in_before));
 
             const auto cost_after =
-                distance_on_route(m_prob, it_in_before,
-                                  std::next(it_in_after, 1)) +
-                distance_on_route(m_prob, std::prev(it_out, 1),
+                distance_on_route(m_prob, m_tw_penalty, it_in_before,
+                                  std::next(it_in_after)) +
+                distance_on_route(m_prob, m_tw_penalty, std::prev(it_out),
                                   std::next(it_out, 2));
 
             // decide whether move is good
@@ -364,6 +362,8 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                 sln.update_customer_owners(m_prob, sln.routes.size() - 1);
                 sln.used_vehicles.emplace(used_vehicle);
                 lists.relocate.emplace(customer, r_in);
+
+                best_ever_value = std::min(best_ever_value, cost_after);
             } else {
                 // move is bad - roll back the changes
                 route_in.insert(erased, customer);
@@ -381,6 +381,8 @@ void LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
 }
 
 void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
+    static double best_ever_value = std::numeric_limits<double>::max();
+
     const auto size = m_prob.n_customers();
     for (size_t customer = 1; customer < size; ++customer) {
         // TODO: handle case when route not found - debug only?
@@ -396,13 +398,6 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
             std::tie(r2, n_index) = sln.customer_owners[neighbour];
             // do not relocate inside the same route
             if (r1 == r2) {
-                continue;
-            }
-
-            // TODO: debug this is correct
-            // there's a tabu list entry for (customer, neighbour)
-            if (lists.exchange.has(customer, r2) ||
-                lists.exchange.has(neighbour, r1)) {
                 continue;
             }
 
@@ -422,17 +417,26 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
 
             // perform exchange (just swap customer indices)
             auto it1 = atit(route1, c_index), it2 = atit(route2, n_index);
-            const auto cost_before = paired_distance_on_route(m_prob, it1, it2);
+            const auto cost_before =
+                paired_distance_on_route(m_prob, m_tw_penalty, it1, it2);
             std::swap(*it1, *it2);
-            const auto cost_after = paired_distance_on_route(m_prob, it1, it2);
+            const auto cost_after =
+                paired_distance_on_route(m_prob, m_tw_penalty, it1, it2);
+
+            // aspiration criteria
+            const bool impossible_move = (lists.exchange.has(customer, r2) ||
+                                          lists.exchange.has(neighbour, r1)) &&
+                                         cost_after >= best_ever_value;
 
             // decide whether move is good
-            if (cost_after < cost_before) {
+            if (!impossible_move && cost_after < cost_before) {
                 // move is good
                 sln.update_customer_owners(m_prob, r1);
                 sln.update_customer_owners(m_prob, r2);
                 lists.exchange.emplace(customer, r1);
                 lists.exchange.emplace(neighbour, r2);
+
+                best_ever_value = std::min(best_ever_value, cost_after);
                 break;
             } else {
                 // move is bad - roll back the changes
@@ -444,6 +448,8 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
 
 // TODO: check constraints & tabu lists
 void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
+    static double best_ever_value = std::numeric_limits<double>::max();
+
     for (size_t ri = 0; ri < sln.routes.size(); ++ri) {
         auto& route = sln.routes[ri].second;
 
@@ -452,38 +458,39 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
         while (can_improve) {
             bool found_new_best = false;
             // skip depots && beware of k = i + 1
-            for (auto i = std::next(route.begin(), 1);
+            for (auto i = std::next(route.begin());
                  i != std::prev(route.end(), 2); ++i) {
                 if (found_new_best)  // fast loop break
                     break;
                 // skip depots && start from i + 1
-                for (auto k = std::next(i, 1); k != std::prev(route.end(), 1);
-                     ++k) {
-                    // there's a tabu list entry for (i, k)
-                    if (lists.two_opt.has(*i, *k)) {
-                        continue;
-                    }
+                for (auto k = std::next(i); k != std::prev(route.end()); ++k) {
 
                     // cost before: (i-1)->i->(i+1) + (k-1)->k->(k+1)
                     const auto cost_before =
-                        paired_distance_on_route(m_prob, i, k);
+                        paired_distance_on_route(m_prob, m_tw_penalty, i, k);
                     // perform 2-opt
-                    std::reverse(i, std::next(k, 1));
+                    std::reverse(i, std::next(k));
                     // cost after: (i-1)->k->(i+1) + (k-1)->i->(k+1)
                     const auto cost_after =
-                        paired_distance_on_route(m_prob, i, k);
+                        paired_distance_on_route(m_prob, m_tw_penalty, i, k);
+
+                    // aspiration
+                    const bool impossible_move = lists.two_opt.has(*i, *k) &&
+                                                 cost_after >= best_ever_value;
 
                     // decide whether move is good
-                    if (cost_after < cost_before) {
+                    if (impossible_move && cost_after < cost_before) {
                         // move is good
                         found_new_best = true;
                         // forbid previously existing edges
-                        lists.two_opt.emplace(*i, *std::next(i, 1));
-                        lists.two_opt.emplace(*k, *std::next(k, 1));
+                        lists.two_opt.emplace(*i, *std::next(i));
+                        lists.two_opt.emplace(*k, *std::next(k));
+
+                        best_ever_value = std::min(best_ever_value, cost_after);
                         break;
                     } else {
                         // move is bad - roll back the changes
-                        std::reverse(i, std::next(k, 1));
+                        std::reverse(i, std::next(k));
                     }
                 }
             }
@@ -493,27 +500,27 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
         }
     }
     sln.update_customer_owners(m_prob);
-}
+}  // namespace tabu
 
 void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {}
 
 void LocalSearchMethods::intra_relocate(Solution& sln) {
     for (size_t ri = 0; ri < sln.routes.size(); ++ri) {
         auto& route = sln.routes[ri].second;
-        for (auto pos = std::next(route.begin(), 1);
-             pos != std::prev(route.end(), 1); ++pos) {
-            for (auto new_pos = std::next(route.begin(), 1);
-                 new_pos != std::prev(route.end(), 1); ++new_pos) {
+        for (auto pos = std::next(route.begin()); pos != std::prev(route.end());
+             ++pos) {
+            for (auto new_pos = std::next(route.begin());
+                 new_pos != std::prev(route.end()); ++new_pos) {
                 if (pos == new_pos) {
                     continue;
                 }
 
-                const auto cost_before =
-                    distance_on_route(m_prob, route.begin(), route.end());
+                const auto cost_before = distance_on_route(
+                    m_prob, m_tw_penalty, route.begin(), route.end());
                 // move customer to new position
                 std::swap(*pos, *new_pos);
-                const auto cost_after =
-                    distance_on_route(m_prob, route.begin(), route.end());
+                const auto cost_after = distance_on_route(
+                    m_prob, m_tw_penalty, route.begin(), route.end());
 
                 // decide whether move is good
                 if (cost_after >= cost_before) {
@@ -525,5 +532,7 @@ void LocalSearchMethods::intra_relocate(Solution& sln) {
     }
     sln.update_customer_owners(m_prob);
 }
+
+void LocalSearchMethods::set_tw_penalty(double value) { m_tw_penalty = value; }
 }  // namespace tabu
 }  // namespace vrp

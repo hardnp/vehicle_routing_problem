@@ -15,6 +15,8 @@ class LocalSearchMethods {
     using methods_t = std::vector<std::function<void(Solution&, TabuLists&)>>;
     methods_t m_methods = methods_t(4);
 
+    double m_tw_penalty = 0.0;  ///< penalty for time windows violation
+
 public:
     LocalSearchMethods() = delete;
     LocalSearchMethods(const Problem& prob) noexcept;
@@ -28,6 +30,7 @@ public:
     size_t size() const;
     const methods_t::value_type& operator[](size_t i) const;
 
+    // main local search heuristics:
     void exchange(Solution& sln, TabuLists& lists);
     void relocate(Solution& sln, TabuLists& lists);
     void relocate_split(Solution& sln, TabuLists& lists);
@@ -36,6 +39,9 @@ public:
     // additional heuristics:
     void route_save(Solution& sln, size_t threshold);
     void intra_relocate(Solution& sln);
+
+    // time windows management:
+    void set_tw_penalty(double value);
 };
 }  // namespace tabu
 }  // namespace vrp
