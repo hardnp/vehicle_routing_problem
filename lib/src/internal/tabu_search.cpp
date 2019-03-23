@@ -16,13 +16,12 @@ namespace vrp {
 namespace detail {
 namespace {
 // constants
-static constexpr const uint32_t TABU_SEARCH_ITERS = 100;
-static constexpr const uint32_t MAX_ITERS =
-    std::numeric_limits<uint32_t>::max();
-static constexpr const uint32_t ROUTE_SAVING_ITERS = 5;
-static constexpr const uint32_t ROUTE_SAVING_THRESHOLD = 7;
-static constexpr const uint32_t INTRA_RELOCATION_ITERS = 15;
-static constexpr const double TIME_WINDOWS_PENALTY_BASE = 1.2;
+constexpr const uint32_t TABU_SEARCH_ITERS = 100;
+constexpr const uint32_t MAX_ITERS = std::numeric_limits<uint32_t>::max();
+constexpr const uint32_t ROUTE_SAVING_ITERS = 5;
+constexpr const uint32_t ROUTE_SAVING_THRESHOLD = 7;
+constexpr const uint32_t INTRA_RELOCATION_ITERS = 15;
+constexpr const double TIME_WINDOWS_PENALTY_BASE = 1.2;
 
 void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
                        size_t i) {

@@ -77,6 +77,9 @@ int main(int argc, char* argv[]) {
              << vrp::constraints::satisfies_time_windows(problem,
                                                          best_initial_sln)
              << EOL;
+    LOG_INFO << "Initial solution's total violated time: "
+             << vrp::constraints::total_violated_time(problem, best_initial_sln)
+             << EOL;
     LOG_INFO << "Objective = " << objective(problem, best_initial_sln) << EOL;
 #endif
 
@@ -104,6 +107,8 @@ int main(int argc, char* argv[]) {
     LOG_INFO << "Improved solution satisfies Time Windows: "
              << vrp::constraints::satisfies_time_windows(problem, best_sln)
              << EOL;
+    LOG_INFO << "Improved solution's total violated time: "
+             << vrp::constraints::total_violated_time(problem, best_sln) << EOL;
     LOG_INFO << "Objective = " << objective(problem, best_sln) << EOL;
 #endif
 

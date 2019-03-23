@@ -18,7 +18,7 @@ inline int total_violated_time(const Problem& prob, ListIt first, ListIt last) {
     }
 
     int violated_time = 0;
-    auto next_first = std::next(first, 1);
+    auto next_first = std::next(first);
     const auto& customers = prob.customers;
 
     int start_time = 0;

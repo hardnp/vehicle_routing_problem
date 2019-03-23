@@ -1,4 +1,4 @@
-#include "cluster_first_route_second.h"
+#include "constraints.h"
 #include "logging.h"
 
 #include <algorithm>
@@ -402,7 +402,7 @@ template<typename T> using mat_t = std::vector<std::vector<T>>;
 template<typename T, typename ListIt>
 T sum_route_part(const mat_t<T>& mat, ListIt first, ListIt last) {
     T sum = static_cast<T>(0);
-    for (auto first2 = std::next(first, 1); first2 != last; ++first, ++first2) {
+    for (auto first2 = std::next(first); first2 != last; ++first, ++first2) {
         sum += mat[*first][*first2];
     }
     return sum;
@@ -437,6 +437,10 @@ solve_cvrp(const Heuristic& h) {
     for (auto& type_and_customers : typed_customers) {
         auto t = type_and_customers.first;
         auto unrouted = type_and_customers.second;
+        unrouted.sort([&prob](auto a, auto b) {
+            return prob.customers[a].hard_tw.first <
+                   prob.customers[b].hard_tw.first;
+        });
         // TODO: sort vehicles by some criterion (e.g. capacity/cost efficiency)
         const auto& vehicles = all_types[t].vehicles;
         bool last_vehicle = false;
@@ -462,7 +466,7 @@ solve_cvrp(const Heuristic& h) {
                         running_capacity < prob.customers[c].demand)
                         continue;
                     std::list<double> ratings_c2{};
-                    for (auto i = route.cbegin(), j = std::next(i, 1);
+                    for (auto i = route.cbegin(), j = std::next(i);
                          j != route.cend(); ++i, ++j) {
                         // calculate total route distance with `c` included:
                         // 0->i + (i->c + c->j) + j->0
@@ -507,16 +511,36 @@ solve_cvrp(const Heuristic& h) {
                     continue;
 
                 // find optimal customer and update route
-                auto optimal = *std::min_element(
-                    optimal_c2.cbegin(), optimal_c2.cend(),
-                    [](const opt_data_t& a, const opt_data_t& b) {
-                        return std::get<1>(a) < std::get<1>(b);
-                    });
-                const auto& c = std::get<0>(optimal);
+                optimal_c2.sort([](const opt_data_t& a, const opt_data_t& b) {
+                    return std::get<1>(a) < std::get<1>(b);
+                });
+                auto optimal = optimal_c2.cbegin();
 
+                // handle time window constraints:
+                std::decay_t<decltype(route)> updated_route = route;
+                if (!last_vehicle) {
+                    for (; optimal != optimal_c2.cend(); ++optimal) {
+                        updated_route.insert(std::next(updated_route.cbegin(),
+                                                       std::get<2>(*optimal)),
+                                             std::get<0>(*optimal));
+                        if (constraints::total_violated_time(
+                                prob, updated_route.cbegin(),
+                                updated_route.cend()) == 0) {
+                            break;
+                        }
+                        updated_route = route;
+                    }
+
+                    if (optimal == optimal_c2.cend()) {
+                        continue;
+                    }
+                }
+
+                const auto& c = std::get<0>(*optimal);
                 unrouted.remove(c);
-                route.insert(std::next(route.cbegin(), std::get<2>(optimal)),
-                             c);
+                route = std::move(updated_route);
+                assert(route.size() > 2);
+
                 running_capacity -= prob.customers[c].demand;
                 nothing_to_add = false;
             }
