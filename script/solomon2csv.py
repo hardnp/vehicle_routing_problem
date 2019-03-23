@@ -51,6 +51,12 @@ def parse_solomon_instance(io_stream):
     return int(number), int(capacity), customer_data
 
 
+def check_customer_table_correctness(row):
+    int_row = [int(e) for e in row]
+    if (int_row[7] > int_row[4] - int_row[3]):
+        raise ValueError("Customer table: service time > hard time window")
+
+
 def write_table_customer(io_stream, customers):
     """Write table customer into provided stream"""
     io_stream.write('table customer\n')
@@ -60,6 +66,7 @@ def write_table_customer(io_stream, customers):
     for customer in customers:
         row = customer[:1] + customer[3:4] + customer[3:6] + customer[4:6] \
             + customer[6:7]
+        check_customer_table_correctness(row)
         io_stream.write(';'.join(row) + '\n')
 
 
