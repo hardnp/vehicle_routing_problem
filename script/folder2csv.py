@@ -216,6 +216,10 @@ def write_table_customer(io_stream, tables):
                             for v in suitable_vehicles])
         if suitable_vehicles:
             service_time /= len(suitable_vehicles)
+
+        if (float(service_time) > float(values[1]) - float(values[0])):
+            raise ValueError("Customer table: service time > hard time window")
+
         table_entry.append(service_time)  # service_time
         table_entry += suitable_vehicles  # suitable vehicles
         io_stream.write(';'.join(to_str(table_entry)) + '\n')
