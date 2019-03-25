@@ -534,6 +534,10 @@ solve_cvrp(const Heuristic& h) {
                     if (optimal == optimal_c2.cend()) {
                         continue;
                     }
+                } else {
+                    updated_route.insert(std::next(updated_route.cbegin(),
+                                                   std::get<2>(*optimal)),
+                                         std::get<0>(*optimal));
                 }
 
                 const auto& c = std::get<0>(*optimal);
