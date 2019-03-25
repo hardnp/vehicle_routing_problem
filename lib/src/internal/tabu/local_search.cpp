@@ -99,6 +99,24 @@ inline double paired_distance_on_route(const Problem& prob, double penalty,
            distance_on_route(prob, penalty, std::prev(k), std::next(k, 2));
 }
 
+/// calculate total demand for given range
+template<typename ListIt>
+inline TransportationQuantity total_demand(const Problem& prob, ListIt first,
+                                           ListIt last) {
+    if (first == last) {
+        throw std::runtime_error("empty range provided");
+    }
+
+    TransportationQuantity demand;
+
+    const auto& customers = prob.customers;
+    for (; first != last; ++first) {
+        demand += customers[*first].demand;
+    }
+
+    return demand;
+}
+
 inline bool is_loop(const Solution::RouteType& route) {
     if (route.size() > 2) {
         return false;
@@ -288,9 +306,16 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                 distance_on_route(m_prob, m_tw_penalty, it_out_before,
                                   std::next(it_out_after));
 
+            const auto out_demand_after =
+                total_demand(m_prob, route_out.cbegin(), route_out.cend());
+
             // aspiration criteria
-            const bool impossible_move = lists.relocate.has(customer, r_out) &&
-                                         cost_after >= best_ever_value;
+            bool impossible_move = lists.relocate.has(customer, r_out) &&
+                                   cost_after >= best_ever_value;
+
+            const auto out_capacity =
+                m_prob.vehicles[sln.routes[r_out].first].capacity;
+            impossible_move |= (out_demand_after > out_capacity);
 
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
@@ -419,15 +444,39 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
             auto it1 = atit(route1, c_index), it2 = atit(route2, n_index);
             const auto cost_before =
                 paired_distance_on_route(m_prob, m_tw_penalty, it1, it2);
+
+            auto demand1_before =
+                     total_demand(m_prob, route1.cbegin(), route1.cend()),
+                 demand2_before =
+                     total_demand(m_prob, route2.cbegin(), route2.cend());
+            auto demand_it1 = m_prob.customers[*it1].demand,
+                 demand_it2 = m_prob.customers[*it2].demand;
+
             std::swap(*it1, *it2);
+
             const auto cost_after =
                 paired_distance_on_route(m_prob, m_tw_penalty, it1, it2);
 
-            // aspiration criteria
-            const bool impossible_move = (lists.exchange.has(customer, r2) ||
-                                          lists.exchange.has(neighbour, r1)) &&
-                                         cost_after >= best_ever_value;
+            const auto demand1_after = demand1_before - demand_it1 + demand_it2,
+                       demand2_after = demand2_before - demand_it2 + demand_it1;
 
+            // aspiration criteria
+            bool impossible_move = (lists.exchange.has(customer, r2) ||
+                                    lists.exchange.has(neighbour, r1)) &&
+                                   cost_after >= best_ever_value;
+
+            const auto route1_capacity =
+                           m_prob.vehicles[sln.routes[r1].first].capacity,
+                       route2_capacity =
+                           m_prob.vehicles[sln.routes[r2].first].capacity;
+            impossible_move |= (demand1_after > route1_capacity ||
+                                demand2_after > route2_capacity);
+#if 0  // TODO: enable
+            impossible_move |= (demand1_after > route1_capacity ||
+                                demand2_after > route2_capacity) &&
+                               (demand1_after + demand2_after >
+                                demand1_before + demand2_before);
+#endif
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
                 // move is good

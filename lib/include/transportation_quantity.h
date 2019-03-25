@@ -50,11 +50,21 @@ public:
         return *this;
     }
 
+    inline TransportationQuantity
+    operator-(TransportationQuantity other) noexcept {
+        return {this->volume - other.volume, this->weight - other.weight};
+    }
+
     inline TransportationQuantity&
     operator+=(TransportationQuantity other) noexcept {
         this->volume += other.volume;
         this->weight += other.weight;
         return *this;
+    }
+
+    inline TransportationQuantity
+    operator+(TransportationQuantity other) noexcept {
+        return {this->volume + other.volume, this->weight + other.weight};
     }
 
     inline explicit operator bool() const noexcept {
