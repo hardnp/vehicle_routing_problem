@@ -94,8 +94,7 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
         if (!constraints::satisfies_time_windows(prob, curr_sln)) {
             ++tw_violation_count;
         } else {
-            tw_violation_count = 0;
-            ls.set_tw_penalty(0.0);
+            tw_violation_count = 1;
         }
 
         auto curr_sln_copy = curr_sln;
