@@ -38,6 +38,9 @@ void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
     case 3:
         lists.two_opt = std::move(new_lists.two_opt);
         break;
+    case 4:
+        lists.cross = std::move(new_lists.cross);
+        break;
     default:
         throw std::out_of_range("tabu list index out of range");
     }
@@ -126,15 +129,12 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
         }
 
         if (perform_route_saving || perform_intra_relocation) {
-            for (auto& sln : slns) {
-                sln = curr_sln_copy;
-            }
+            slns = repeat(curr_sln_copy, ls.size());
         }
     }
 
     // post-optimization phase. drastically penalize for TW violation
     ls.penalize_tw(std::pow(objective(prob, best_sln), 2));
-    ls.explore(true);
 
     slns = repeat(best_sln, ls.size());
     // no tabu is required now

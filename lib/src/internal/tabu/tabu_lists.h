@@ -124,12 +124,15 @@ public:
     tabu_list_t relocate_split = {};
     // pair of customers
     tabu_list_t two_opt = {};
+    // pair of customers
+    tabu_list_t cross = {};
 
     TabuLists& operator--() {
         exchange.decrement();
         relocate.decrement();
         relocate_split.decrement();
         two_opt.decrement();
+        cross.decrement();
         return *this;
     }
 };

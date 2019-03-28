@@ -177,6 +177,19 @@ void delete_loops_after_relocate(Solution& sln, TabuLists& lists) {
     }
 }
 
+template<typename ListIt>
+inline void cross_routes(Solution::RouteType& lhs, ListIt lhs_first,
+                         Solution::RouteType& rhs, ListIt rhs_first) {
+    auto tmp = rhs;
+    auto tmp_first =
+        std::next(tmp.begin(), std::distance(rhs.begin(), rhs_first));
+
+    rhs.erase(rhs_first, rhs.end());
+
+    rhs.splice(rhs.end(), lhs, lhs_first, lhs.end());
+    lhs.splice(lhs.end(), tmp, tmp_first, tmp.end());
+}
+
 inline Solution::RouteType remove_depots(const Solution::RouteType& route) {
     auto copy = route;
     copy.pop_front();
@@ -202,6 +215,8 @@ LocalSearchMethods::LocalSearchMethods(const Problem& prob) noexcept
     m_methods[2] = std::bind(&LocalSearchMethods::exchange, this,
                              std::placeholders::_1, std::placeholders::_2);
     m_methods[3] = std::bind(&LocalSearchMethods::two_opt, this,
+                             std::placeholders::_1, std::placeholders::_2);
+    m_methods[4] = std::bind(&LocalSearchMethods::cross, this,
                              std::placeholders::_1, std::placeholders::_2);
 }
 
@@ -509,9 +524,7 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
                 lists.exchange.emplace(neighbour, r2);
 
                 best_ever_value = std::min(best_ever_value, cost_after);
-                if (!m_explore_all_neighbourhoods) {
-                    break;
-                }
+                break;
             } else {
                 // move is bad - roll back the changes
                 std::swap(*it1, *it2);
@@ -574,6 +587,93 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
         }
     }
     sln.update_customer_owners(m_prob);
+}
+
+void LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
+    static double best_ever_value = std::numeric_limits<double>::max();
+
+    const auto size = m_prob.n_customers();
+    for (size_t customer = 1; customer < size; ++customer) {
+        // TODO: handle case when route not found - debug only?
+        size_t r1 = 0, c_index = 0;
+        std::tie(r1, c_index) = sln.customer_owners[customer];
+        auto& route1 = sln.routes[r1].second;
+        if (is_loop(route1)) {
+            continue;
+        }
+        for (size_t neighbour = 1; neighbour < size; ++neighbour) {
+            if (customer == neighbour) {
+                continue;
+            }
+
+            // TODO: handle case when route not found - debug only?
+            size_t r2 = 0, n_index = 0;
+            std::tie(r2, n_index) = sln.customer_owners[neighbour];
+            // do not relocate inside the same route
+            if (r1 == r2) {
+                continue;
+            }
+
+            auto& route2 = sln.routes[r2].second;
+            if (is_loop(route2)) {
+                continue;
+            }
+
+            // check if both customers can be exchanged
+            if (!site_dependent(m_prob, sln.routes[r2].first, customer) ||
+                !site_dependent(m_prob, sln.routes[r1].first, neighbour)) {
+                // cannot exchange customers within forbidden route
+                continue;
+            }
+
+            // we assume we can exchange two iterators at this point
+
+            // perform exchange (just swap customer indices)
+            auto it1 = atit(route1, c_index), it2 = atit(route2, n_index);
+
+            const auto cost_before =
+                distance_on_route(m_prob, m_tw_penalty, it1, route1.end()) +
+                distance_on_route(m_prob, m_tw_penalty, it2, route2.end());
+
+            cross_routes(route1, std::next(it1), route2, std::next(it2));
+
+            const auto cost_after =
+                distance_on_route(m_prob, m_tw_penalty, it1, route1.end()) +
+                distance_on_route(m_prob, m_tw_penalty, it2, route2.end());
+
+            const auto demand1_after =
+                           total_demand(m_prob, route1.cbegin(), route1.cend()),
+                       demand2_after =
+                           total_demand(m_prob, route2.cbegin(), route2.cend());
+
+            // aspiration criteria
+            bool impossible_move = (lists.cross.has(customer, r2) ||
+                                    lists.cross.has(neighbour, r1)) &&
+                                   cost_after >= best_ever_value;
+
+            const auto route1_capacity =
+                           m_prob.vehicles[sln.routes[r1].first].capacity,
+                       route2_capacity =
+                           m_prob.vehicles[sln.routes[r2].first].capacity;
+            impossible_move |= (demand1_after > route1_capacity ||
+                                demand2_after > route2_capacity);
+
+            // decide whether move is good
+            if (!impossible_move && cost_after < cost_before) {
+                // move is good
+                sln.update_customer_owners(m_prob, r1);
+                sln.update_customer_owners(m_prob, r2);
+                lists.cross.emplace(*it1, *std::next(it1));
+                lists.cross.emplace(*it2, *std::next(it2));
+
+                best_ever_value = std::min(best_ever_value, cost_after);
+                break;
+            } else {
+                // move is bad - roll back the changes
+                cross_routes(route1, std::next(it1), route2, std::next(it2));
+            }
+        }
+    }
 }
 
 void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
@@ -746,9 +846,5 @@ void LocalSearchMethods::intra_relocate(Solution& sln) {
 }
 
 void LocalSearchMethods::penalize_tw(double value) { m_tw_penalty = value; }
-
-void LocalSearchMethods::explore(bool value) {
-    m_explore_all_neighbourhoods = value;
-}
 }  // namespace tabu
 }  // namespace vrp
