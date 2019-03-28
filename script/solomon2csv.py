@@ -76,7 +76,7 @@ def write_table_vehicles(io_stream, vnumber, vcapacity):
     io_stream.write('table vehicle\n')
     io_stream.write('id;volume;weight;fixed_cost;variable_cost\n')
     for i in range(0, vnumber):
-        row = [i, vcapacity, vcapacity, 1.0, 1.0]
+        row = [i, vcapacity, vcapacity, 0.0, 1.0]
         row = [str(e) for e in row]
         io_stream.write(';'.join(row) + '\n')
 
