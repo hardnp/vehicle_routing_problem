@@ -17,6 +17,10 @@ class LocalSearchMethods {
 
     double m_tw_penalty = 0.0;  ///< penalty for time windows violation
 
+    bool m_explore_all_neighbourhoods =
+        false;  ///< explore all solution, do not use "first improvement"
+                ///< strategy
+
 public:
     LocalSearchMethods() = delete;
     LocalSearchMethods(const Problem& prob) noexcept;
@@ -41,7 +45,9 @@ public:
     void intra_relocate(Solution& sln);
 
     // time windows management:
-    void set_tw_penalty(double value);
+    void penalize_tw(double value);
+
+    void explore(bool value);
 };
 }  // namespace tabu
 }  // namespace vrp

@@ -42,6 +42,22 @@ void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
         throw std::out_of_range("tabu list index out of range");
     }
 }
+
+inline void do_local_search(const tabu::LocalSearchMethods& ls,
+                            std::vector<Solution>& slns,
+                            tabu::TabuLists& lists) {
+    assert(slns.size() == ls.size());
+    threading::parallel_for(ls.size(),
+                            [&](size_t m) { ls[m](slns[m], lists); });
+}
+
+inline std::vector<Solution> repeat(const Solution& sln, size_t times) {
+    std::vector<Solution> slns(times);
+    for (auto& s : slns) {
+        s = sln;
+    }
+    return slns;
+}
 }  // namespace
 
 Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
@@ -59,9 +75,8 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     best_sln.update_used_vehicles();
     assert(!best_sln.customer_owners.empty());
 
-    std::vector<Solution> slns = {best_sln, best_sln, best_sln, best_sln};
+    std::vector<Solution> slns = repeat(best_sln, ls.size());
     tabu::TabuLists lists{};
-    assert(slns.size() == ls.size());
 
     int tw_violation_count = 1;
 
@@ -70,15 +85,10 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     for (uint32_t i = 0, ci = 0; i < TABU_SEARCH_ITERS && ci < MAX_ITERS;
          ++i, ++ci) {
 
-        ls.set_tw_penalty(
-            std::pow(TIME_WINDOWS_PENALTY_BASE, tw_violation_count));
+        ls.penalize_tw(std::pow(TIME_WINDOWS_PENALTY_BASE, tw_violation_count));
 
         auto updated_lists = lists;
-        threading::parallel_for(ls.size(), [&](size_t m) {
-            // for (size_t m = 0; m < ls.size(); ++m) {
-            // re-write current solution
-            ls[m](slns[m], updated_lists);
-        });
+        do_local_search(ls, slns, updated_lists);
 
         auto min_sln_it =
             std::min_element(slns.cbegin(), slns.cend(), sln_comp);
@@ -121,6 +131,17 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
             }
         }
     }
+
+    // post-optimization phase. drastically penalize for TW violation
+    ls.penalize_tw(std::pow(objective(prob, best_sln), 2));
+    ls.explore(true);
+
+    slns = repeat(best_sln, ls.size());
+    // no tabu is required now
+    lists = tabu::TabuLists();
+    do_local_search(ls, slns, lists);
+
+    best_sln = *std::min_element(slns.cbegin(), slns.cend(), sln_comp);
 
     // TODO: add US heuristic as well
     ls.intra_relocate(best_sln);

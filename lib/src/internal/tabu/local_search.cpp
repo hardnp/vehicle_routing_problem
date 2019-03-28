@@ -509,7 +509,9 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
                 lists.exchange.emplace(neighbour, r2);
 
                 best_ever_value = std::min(best_ever_value, cost_after);
-                break;
+                if (!m_explore_all_neighbourhoods) {
+                    break;
+                }
             } else {
                 // move is bad - roll back the changes
                 std::swap(*it1, *it2);
@@ -743,6 +745,10 @@ void LocalSearchMethods::intra_relocate(Solution& sln) {
     sln.update_customer_owners(m_prob);
 }
 
-void LocalSearchMethods::set_tw_penalty(double value) { m_tw_penalty = value; }
+void LocalSearchMethods::penalize_tw(double value) { m_tw_penalty = value; }
+
+void LocalSearchMethods::explore(bool value) {
+    m_explore_all_neighbourhoods = value;
+}
 }  // namespace tabu
 }  // namespace vrp
