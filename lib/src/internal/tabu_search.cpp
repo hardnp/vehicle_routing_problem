@@ -115,21 +115,15 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
             ls.intra_relocate(curr_sln_copy);
         }
 
-        // update all solutions to current best
-        for (auto& sln : slns) {
-            sln = curr_sln_copy;
-        }
-
-        // no additional improvements were performed
-        if (!perform_route_saving && !perform_intra_relocation) {
-            continue;
-        }
-
-        if (objective(prob, curr_sln_copy) < objective(prob, best_sln)) {
-            best_sln = std::move(curr_sln_copy);
-            i = 0;
+        if (perform_route_saving || perform_intra_relocation) {
+            for (auto& sln : slns) {
+                sln = curr_sln_copy;
+            }
         }
     }
+
+    // TODO: add US heuristic as well
+    ls.intra_relocate(best_sln);
 
     return best_sln;
 }

@@ -111,6 +111,7 @@ Problem CsvParser::read(std::istream& in) const {
                                1, this->m_delimiter)
             .get();
     problem.set_up();
+
     return problem;
 }
 

@@ -127,6 +127,21 @@ inline bool is_loop(const Solution::RouteType& route) {
     return *route.cbegin() == *std::next(route.cbegin());
 }
 
+void delete_loops_after_relocate(Solution& sln) {
+    std::stack<decltype(sln.routes)::const_iterator> loop_indices;
+    for (size_t ri = 0, size = sln.routes.size(); ri < size; ++ri) {
+        if (is_loop(sln.routes[ri].second)) {
+            loop_indices.push(sln.routes.cbegin() + ri);
+        }
+    }
+
+    while (!loop_indices.empty()) {
+        auto loop = loop_indices.top();
+        sln.routes.erase(loop);
+        loop_indices.pop();
+    }
+}
+
 void delete_loops_after_relocate(Solution& sln, TabuLists& lists) {
     std::stack<decltype(sln.routes)::const_iterator> loop_indices;
     for (size_t ri = 0, size = sln.routes.size(); ri < size; ++ri) {
@@ -160,7 +175,7 @@ void delete_loops_after_relocate(Solution& sln, TabuLists& lists) {
         sln.routes.erase(loop);
         loop_indices.pop();
     }
-}  // namespace
+}
 
 inline Solution::RouteType remove_depots(const Solution::RouteType& route) {
     auto copy = route;
@@ -241,6 +256,10 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
             continue;
         }
         for (size_t neighbour = 1; neighbour < size; ++neighbour) {
+            if (customer == neighbour) {
+                continue;
+            }
+
             // TODO: handle case when route not found - debug only?
             size_t r_out = 0, n_index = 0;
             std::tie(r_out, n_index) = sln.customer_owners[neighbour];
@@ -399,7 +418,7 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
     }
     delete_loops_after_relocate(sln, lists);
     sln.update_customer_owners(m_prob);
-}  // namespace tabu
+}
 
 void LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
     return;
@@ -418,6 +437,10 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
             continue;
         }
         for (size_t neighbour = 1; neighbour < size; ++neighbour) {
+            if (customer == neighbour) {
+                continue;
+            }
+
             // TODO: handle case when route not found - debug only?
             size_t r2 = 0, n_index = 0;
             std::tie(r2, n_index) = sln.customer_owners[neighbour];
@@ -549,9 +572,147 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
         }
     }
     sln.update_customer_owners(m_prob);
-}  // namespace tabu
+}
 
-void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {}
+void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
+    // _must_ relocate all customers, otherwise do not relocate anyone
+    auto sln_copy = sln;
+
+    std::list<size_t> small_routes;
+    for (size_t ri = 0; ri < sln.routes.size(); ++ri) {
+        auto& route = sln.routes[ri].second;
+        if (route.size() > threshold) {
+            continue;
+        }
+        small_routes.emplace_back(ri);
+    }
+    small_routes.sort([&sln](size_t i, size_t j) {
+        return sln.routes[i].second.size() < sln.routes[j].second.size();
+    });
+
+    const auto size = m_prob.n_customers();
+    while (!small_routes.empty()) {
+        auto r_in = small_routes.front();
+        small_routes.pop_front();
+        auto& route_in = sln.routes[r_in].second;
+
+        const size_t max_iters = route_in.size();
+        for (size_t iter = 0; iter < max_iters && !is_loop(route_in); ++iter) {
+            size_t customer = *std::next(route_in.cbegin());
+
+            size_t _ = 0, c_index = 0;
+            std::tie(_, c_index) = sln.customer_owners[customer];
+            assert(_ == r_in);
+            // check if current route (where customer was relocated) is small,
+            // if not anymore, skip
+            if (_ == r_in && route_in.size() > threshold) {
+                break;
+            }
+
+            for (size_t neighbour = 1; neighbour < size; ++neighbour) {
+                if (customer == neighbour) {
+                    continue;
+                }
+
+                // TODO: handle case when route not found - debug only?
+                size_t r_out = 0, n_index = 0;
+                std::tie(r_out, n_index) = sln.customer_owners[neighbour];
+                // do not relocate inside the same route
+                if (r_in == r_out) {
+                    continue;
+                }
+
+                auto& route_out = sln.routes[r_out].second;
+                if (is_loop(route_out)) {
+                    continue;
+                }
+                if (!site_dependent(m_prob, sln.routes[r_out].first,
+                                    customer)) {
+                    // cannot insert customer in not allowed route
+                    continue;
+                }
+
+                // customer value represents the length of route i -> j, where:
+                // ... -> (i -> customer -> j) -> ...
+                const auto customer_value = distance_on_route(
+                    m_prob, 0, route_in, c_index - 1, c_index + 2);
+                const auto customer_neighbour_distance =
+                    m_prob.costs[customer][neighbour];
+                const auto customer_before_neighbour_value =
+                    customer_neighbour_distance +
+                    m_prob.costs[customer][at(route_out, n_index - 1)];
+                const auto customer_after_neighbour_value =
+                    customer_neighbour_distance +
+                    m_prob.costs[customer][at(route_out, n_index + 1)];
+
+                // if customer is closer to it's neighbours in __current__
+                // route, do not relocate to neighbours in __new__ route
+                if (customer_value < customer_before_neighbour_value &&
+                    customer_value < customer_after_neighbour_value) {
+                    continue;
+                }
+
+                // we assume there's a better place for our customer at this
+                // point
+
+                auto it_in_before = atit(route_in, c_index - 1),
+                     it_in_after = atit(route_in, c_index + 1),
+                     it_out_before = atit(route_out, n_index - 1),
+                     it_out_after = atit(route_out, n_index + 1);
+
+                const auto cost_before =
+                    distance_on_route(m_prob, m_tw_penalty, it_in_before,
+                                      std::next(it_in_after)) +
+                    distance_on_route(m_prob, m_tw_penalty, it_out_before,
+                                      std::next(it_out_after));
+
+                Solution::RouteType::iterator inserted, erased;
+                if (customer_before_neighbour_value <
+                    customer_after_neighbour_value) {
+                    inserted =
+                        route_out.insert(std::next(it_out_before), customer);
+                } else {
+                    inserted = route_out.insert(it_out_after, customer);
+                }
+                erased = route_in.erase(std::next(it_in_before));
+
+                const auto cost_after =
+                    distance_on_route(m_prob, m_tw_penalty, it_in_before,
+                                      std::next(it_in_after)) +
+                    distance_on_route(m_prob, m_tw_penalty, it_out_before,
+                                      std::next(it_out_after));
+
+                const auto out_demand_after =
+                    total_demand(m_prob, route_out.cbegin(), route_out.cend());
+
+                const auto out_capacity =
+                    m_prob.vehicles[sln.routes[r_out].first].capacity;
+                const bool impossible_move = (out_demand_after > out_capacity);
+
+                // decide whether move is good
+                if (!impossible_move && cost_after < cost_before) {
+                    // move is good
+                    sln.update_customer_owners(m_prob, r_in);
+                    sln.update_customer_owners(m_prob, r_out);
+                    break;
+                } else {
+                    // move is bad - roll back the changes
+                    route_in.insert(erased, customer);
+                    route_out.erase(inserted);
+                }
+            }
+        }
+
+        // get more recent copy of solution if route is emptied
+        if (is_loop(route_in)) {
+            sln_copy = sln;
+        }
+    }
+
+    sln = std::move(sln_copy);
+    delete_loops_after_relocate(sln);
+    sln.update_customer_owners(m_prob);
+}
 
 void LocalSearchMethods::intra_relocate(Solution& sln) {
     for (size_t ri = 0; ri < sln.routes.size(); ++ri) {

@@ -117,6 +117,8 @@ public:
     int max_violated_soft_tw =
         std::numeric_limits<int>::max();  ///< max number of violated
                                           /// soft time windows
+    // TODO: add to CSV
+    double time_coeff = 0.0;  ///< time scale coefficient for objective
 
     // TODO: should be part of ctor
     void set_up() {
