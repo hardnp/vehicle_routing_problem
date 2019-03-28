@@ -18,6 +18,9 @@ namespace vrp {
 namespace tabu {
 namespace {
 
+// TODO: debug why 1 doesn't work properly
+#define ALT_TABU_ENTRIES 0
+
 // true if vehicle can deliver to customer, false otherwise
 inline bool site_dependent(const Problem& prob, size_t vehicle,
                            size_t customer) {
@@ -551,6 +554,10 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
                     break;
                 // skip depots && start from i + 1
                 for (auto k = std::next(i); k != std::prev(route.end()); ++k) {
+#if ALT_TABU_ENTRIES
+                    size_t ic = *i, kc = *k, ic_next = *std::next(i),
+                           kc_next = *std::next(k);
+#endif
 
                     // cost before: (i-1)->i->(i+1) + (k-1)->k->(k+1)
                     const auto cost_before =
@@ -570,8 +577,13 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
                         // move is good
                         found_new_best = true;
                         // forbid previously existing edges
+#if ALT_TABU_ENTRIES
+                        lists.two_opt.emplace(ic, ic_next);
+                        lists.two_opt.emplace(kc, kc_next);
+#else
                         lists.two_opt.emplace(*i, *std::next(i));
                         lists.two_opt.emplace(*k, *std::next(k));
+#endif
 
                         best_ever_value = std::min(best_ever_value, cost_after);
                         break;
@@ -630,6 +642,9 @@ void LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
 
             // perform exchange (just swap customer indices)
             auto it1 = atit(route1, c_index), it2 = atit(route2, n_index);
+#if ALT_TABU_ENTRIES
+            size_t c_next1 = *std::next(it1), c_next2 = *std::next(it2);
+#endif
 
             const auto cost_before =
                 distance_on_route(m_prob, m_tw_penalty, it1, route1.end()) +
@@ -663,8 +678,13 @@ void LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
                 // move is good
                 sln.update_customer_owners(m_prob, r1);
                 sln.update_customer_owners(m_prob, r2);
+#if ALT_TABU_ENTRIES
+                lists.cross.emplace(*it1, c_next1);
+                lists.cross.emplace(*it2, c_next2);
+#else
                 lists.cross.emplace(*it1, *std::next(it1));
                 lists.cross.emplace(*it2, *std::next(it2));
+#endif
 
                 best_ever_value = std::min(best_ever_value, cost_after);
                 break;
