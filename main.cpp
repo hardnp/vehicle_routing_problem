@@ -44,6 +44,15 @@ int main(int argc, char* argv[]) {
     if (argc > 2) {
         delimiter = argv[2][0];
     }
+
+    bool print_debug_info = [](char* c) {
+        if (!c) {
+            return false;
+        }
+        auto env_val = std::string(c);
+        return env_val == "YES" || env_val == "Y" || env_val == "1";
+    }(std::getenv("PRINT_DEBUG_INFO"));
+
     vrp::CsvParser parser(delimiter);
     FileHandler input(argv[1]);
     auto problem = parser.read(input.get());
@@ -103,20 +112,23 @@ int main(int argc, char* argv[]) {
 
     parser.write(std::cout, problem, best_sln);
 
-#ifndef NDEBUG
-    LOG_INFO << "Improved solution satisfies Capacity: "
-             << vrp::constraints::satisfies_capacity(problem, best_sln) << EOL;
-    LOG_INFO << "Improved solution satisfies Site-Dependency: "
-             << vrp::constraints::satisfies_site_dependency(problem, best_sln)
-             << EOL;
-    LOG_INFO << "Improved solution satisfies Time Windows: "
-             << vrp::constraints::satisfies_time_windows(problem, best_sln)
-             << EOL;
-    LOG_INFO << "Improved solution's total violated time: "
-             << vrp::constraints::total_violated_time(problem, best_sln) << EOL;
-    LOG_INFO << "Objective = " << objective(problem, best_sln) << EOL;
-    LOG_INFO << "Cost func = " << cost_function(problem, best_sln) << EOL;
-#endif
+    if (print_debug_info) {
+        LOG_INFO << "Improved solution satisfies Capacity: "
+                 << vrp::constraints::satisfies_capacity(problem, best_sln)
+                 << EOL;
+        LOG_INFO << "Improved solution satisfies Site-Dependency: "
+                 << vrp::constraints::satisfies_site_dependency(problem,
+                                                                best_sln)
+                 << EOL;
+        LOG_INFO << "Improved solution satisfies Time Windows: "
+                 << vrp::constraints::satisfies_time_windows(problem, best_sln)
+                 << EOL;
+        LOG_INFO << "Improved solution's total violated time: "
+                 << vrp::constraints::total_violated_time(problem, best_sln)
+                 << EOL;
+        LOG_INFO << "Objective = " << objective(problem, best_sln) << EOL;
+        LOG_INFO << "Cost func = " << cost_function(problem, best_sln) << EOL;
+    }
 
     return 0;
 }
