@@ -30,6 +30,11 @@ public:
 
     ~FileHandler() { m_file.close(); }
 };
+
+void print_fmt(double objective, int violated_time) {
+    LOG_DEBUG << " SOLUTION: " << objective << " | " << violated_time << EOL;
+}
+
 }  // namespace
 
 /// Main entry-point to solver
@@ -123,11 +128,9 @@ int main(int argc, char* argv[]) {
         LOG_INFO << "Improved solution satisfies Time Windows: "
                  << vrp::constraints::satisfies_time_windows(problem, best_sln)
                  << EOL;
-        LOG_INFO << "Improved solution's total violated time: "
-                 << vrp::constraints::total_violated_time(problem, best_sln)
-                 << EOL;
-        LOG_INFO << "Objective = " << objective(problem, best_sln) << EOL;
         LOG_INFO << "Cost func = " << cost_function(problem, best_sln) << EOL;
+        print_fmt(objective(problem, best_sln),
+                  vrp::constraints::total_violated_time(problem, best_sln));
     }
 
     return 0;
