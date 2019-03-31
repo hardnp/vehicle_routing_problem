@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <string>
 #include <tuple>
 
 namespace vrp {
@@ -13,7 +14,7 @@ class LocalSearchMethods {
     const Problem& m_prob;
 
     using methods_t = std::vector<std::function<void(Solution&, TabuLists&)>>;
-    methods_t m_methods = methods_t(5);
+    methods_t m_methods = methods_t(4);
 
     double m_tw_penalty = 0.0;  ///< penalty for time windows violation
 
@@ -40,6 +41,7 @@ public:
     void relocate_split(Solution& sln, TabuLists& lists);
     void two_opt(Solution& sln, TabuLists& lists);
     void cross(Solution& sln, TabuLists& lists);
+    std::string str(size_t i) const;
 
     // additional heuristics:
     void route_save(Solution& sln, size_t threshold);

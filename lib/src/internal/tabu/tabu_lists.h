@@ -99,6 +99,8 @@ public:
         entries = std::move(non_expired_entries);
     }
 
+    inline void clear() { entries.clear(); }
+
     template<typename... Args> void emplace(Args&&... args) {
         entries.emplace(T(std::forward<Args>(args)...));
     }
@@ -134,6 +136,14 @@ public:
         two_opt.decrement();
         cross.decrement();
         return *this;
+    }
+
+    void clear() {
+        exchange.clear();
+        relocate.clear();
+        relocate_split.clear();
+        two_opt.clear();
+        cross.clear();
     }
 };
 }  // namespace tabu

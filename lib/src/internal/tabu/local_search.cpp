@@ -213,13 +213,16 @@ LocalSearchMethods::LocalSearchMethods(const Problem& prob) noexcept
     : m_prob(prob) {
     m_methods[0] = std::bind(&LocalSearchMethods::relocate, this,
                              std::placeholders::_1, std::placeholders::_2);
+    // TODO: do relocate_split
+    /*
     m_methods[1] = std::bind(&LocalSearchMethods::relocate_split, this,
                              std::placeholders::_1, std::placeholders::_2);
-    m_methods[2] = std::bind(&LocalSearchMethods::exchange, this,
+    */
+    m_methods[1] = std::bind(&LocalSearchMethods::exchange, this,
                              std::placeholders::_1, std::placeholders::_2);
-    m_methods[3] = std::bind(&LocalSearchMethods::two_opt, this,
+    m_methods[2] = std::bind(&LocalSearchMethods::two_opt, this,
                              std::placeholders::_1, std::placeholders::_2);
-    m_methods[4] = std::bind(&LocalSearchMethods::cross, this,
+    m_methods[3] = std::bind(&LocalSearchMethods::cross, this,
                              std::placeholders::_1, std::placeholders::_2);
 }
 
@@ -359,7 +362,7 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                 // move is good
                 sln.update_customer_owners(m_prob, r_in);
                 sln.update_customer_owners(m_prob, r_out);
-                lists.relocate.emplace(customer, r_in);
+                lists.relocate.emplace(customer, r_out);
 
                 best_ever_value = std::min(best_ever_value, cost_after);
                 break;
@@ -523,8 +526,8 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
                 // move is good
                 sln.update_customer_owners(m_prob, r1);
                 sln.update_customer_owners(m_prob, r2);
-                lists.exchange.emplace(customer, r1);
-                lists.exchange.emplace(neighbour, r2);
+                lists.exchange.emplace(customer, r2);
+                lists.exchange.emplace(neighbour, r1);
 
                 best_ever_value = std::min(best_ever_value, cost_after);
                 break;
@@ -694,6 +697,12 @@ void LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
             }
         }
     }
+}
+
+std::string LocalSearchMethods::str(size_t i) const {
+    static const std::vector<std::string> methods = {"relocate", "exchange",
+                                                     "two_opt", "cross"};
+    return methods[i];
 }
 
 void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {

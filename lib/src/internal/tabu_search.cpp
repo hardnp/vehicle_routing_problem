@@ -15,12 +15,15 @@
 namespace vrp {
 namespace detail {
 namespace {
+
+// iterations multiplier
+constexpr const double MULTIPLIER = 1.0;
+
 // constants
-constexpr const uint32_t TABU_SEARCH_ITERS = 100;
 constexpr const uint32_t MAX_ITERS = std::numeric_limits<uint32_t>::max();
-constexpr const uint32_t ROUTE_SAVING_ITERS = 5;
-constexpr const uint32_t ROUTE_SAVING_THRESHOLD = 7;
-constexpr const uint32_t INTRA_RELOCATION_ITERS = 15;
+constexpr const uint32_t TABU_SEARCH_ITERS = 100 * MULTIPLIER;
+constexpr const uint32_t ROUTE_SAVING_ITERS = 5 * MULTIPLIER;
+constexpr const uint32_t INTRA_RELOCATION_ITERS = 15 * MULTIPLIER;
 constexpr const double TIME_WINDOWS_PENALTY_BASE = 1.2;
 
 void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
@@ -30,20 +33,22 @@ void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
         lists.relocate = std::move(new_lists.relocate);
         break;
     case 1:
-        lists.relocate_split = std::move(new_lists.relocate_split);
-        break;
-    case 2:
         lists.exchange = std::move(new_lists.exchange);
         break;
-    case 3:
+    case 2:
         lists.two_opt = std::move(new_lists.two_opt);
         break;
-    case 4:
+    case 3:
         lists.cross = std::move(new_lists.cross);
         break;
     default:
         throw std::out_of_range("tabu list index out of range");
     }
+}
+
+uint32_t threshold(const Problem& prob) {
+    // choose between minimum of 3 and 5% of customers
+    return std::max(1u, static_cast<uint32_t>(prob.n_customers() * 0.05)) + 2u;
 }
 
 inline void do_local_search(const tabu::LocalSearchMethods& ls,
@@ -69,6 +74,8 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     thread_local const auto sln_comp = [&prob](const auto& a, const auto& b) {
         return objective(prob, a) < objective(prob, b);
     };
+
+    const auto route_saving_threshold = threshold(prob);
 
     tabu::LocalSearchMethods ls(prob);
 
@@ -122,7 +129,7 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
         const bool perform_intra_relocation = i > INTRA_RELOCATION_ITERS;
 
         if (perform_route_saving) {
-            ls.route_save(curr_sln_copy, ROUTE_SAVING_THRESHOLD);
+            ls.route_save(curr_sln_copy, route_saving_threshold);
         }
         if (perform_intra_relocation) {
             ls.intra_relocate(curr_sln_copy);
