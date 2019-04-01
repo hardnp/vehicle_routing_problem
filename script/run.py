@@ -28,6 +28,7 @@ def run_steps(steps, work_dir='.', name=None):
         if name is not None:
             step_name = name
         sys.stdout.write('[{name}]\n'.format(name=step_name))
+        sys.stdout.flush()
         subprocess.check_call(step, shell=True, cwd=work_dir)
     sys.stdout.flush()
 

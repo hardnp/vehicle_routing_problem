@@ -36,7 +36,9 @@ def main():
                 "data: {d}".format(d=m.group('data')))
 
     for log, result in results.items():
-        print("[{l}]:".format(l=log), result)
+        print("[{l}]".format(l=log))
+        for r in result:
+            print(r)
 
 
 if __name__ == '__main__':
