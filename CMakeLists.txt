@@ -60,3 +60,14 @@ add_executable(${PROJECT_NAME} main.cpp)
 
 # link libraries to binary
 target_link_libraries(${PROJECT_NAME} vrp)
+
+if (${WITH_TBB})  # add TBB dependency
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_TBB=1)
+    target_include_directories(${PROJECT_NAME} PUBLIC ${TBB_INCLUDE_DIR})
+    set(LIBS ${LIBS} ${TBB_LIBRARIES})
+    if (UNIX)  # TODO: check for OS X
+        set(LIBS ${LIBS} ${TBB_LIBRARIES} pthread ${CMAKE_DL_LIBS})
+    endif()
+else()  # fallback to implementation stub
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_TBB=0)
+endif()

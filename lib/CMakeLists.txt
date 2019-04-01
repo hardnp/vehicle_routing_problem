@@ -31,7 +31,7 @@ else()  # fallback to implementation stub
     target_compile_definitions(${PROJECT_NAME} PRIVATE NO_CPLEX_IMPL=1)
 endif()
 
-if (${WITH_TBB})  # add IBM CPLEX dependency
+if (${WITH_TBB})  # add TBB dependency
     target_compile_definitions(${PROJECT_NAME} PRIVATE USE_TBB=1)
     target_include_directories(${PROJECT_NAME} PUBLIC ${TBB_INCLUDE_DIR})
     set(LIBS ${LIBS} ${TBB_LIBRARIES})

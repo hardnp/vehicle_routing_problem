@@ -105,9 +105,12 @@ int main(int argc, char* argv[]) {
 #endif
 
     std::vector<vrp::Solution> improved_solutions(solutions.size());
-    vrp::threading::parallel_for(solutions.size(), [&](size_t i) {
-        improved_solutions[i] = std::move(create_improved_solution(
-            problem, solutions[i], vrp::ImprovementHeuristic::Tabu));
+    vrp::threading::parallel_range(solutions.size(), [&](size_t first,
+                                                         size_t last) {
+        for (; first != last; ++first) {
+            improved_solutions[first] = std::move(create_improved_solution(
+                problem, solutions[first], vrp::ImprovementHeuristic::Tabu));
+        }
     });
 
     std::vector<vrp::Solution> constrained_solutions;
