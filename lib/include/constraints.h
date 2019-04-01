@@ -46,5 +46,7 @@ bool satisfies_site_dependency(const Problem& prob, const Solution& sln);
 inline bool satisfies_time_windows(const Problem& prob, const Solution& sln) {
     return 0 == total_violated_time(prob, sln);
 }
+
+bool satisfies_all(const Problem& prob, const Solution& sln);
 }  // namespace constraints
 }  // namespace vrp

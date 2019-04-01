@@ -36,7 +36,7 @@ void print_fmt(double objective, int violated_time) {
     LOG_DEBUG << " SOLUTION: " << objective << " | " << violated_time << EOL;
 }
 
-constexpr const size_t INITIAL_SLN_COUNT = 10;
+constexpr const size_t INITIAL_SLN_COUNT = 20;
 
 }  // namespace
 
@@ -110,8 +110,22 @@ int main(int argc, char* argv[]) {
             problem, solutions[i], vrp::ImprovementHeuristic::Tabu));
     });
 
+    std::vector<vrp::Solution> constrained_solutions;
+    constrained_solutions.reserve(solutions.size());
+    for (const auto& sln : improved_solutions) {
+        if (!vrp::constraints::satisfies_all(problem, sln)) {
+            continue;
+        }
+        constrained_solutions.emplace_back(sln);
+    }
+    // if there are no solutions that satisfy constraints, choose between all
+    // found
+    if (constrained_solutions.empty()) {
+        constrained_solutions = improved_solutions;
+    }
+
     auto best_sln = *std::min_element(
-        improved_solutions.cbegin(), improved_solutions.cend(),
+        constrained_solutions.cbegin(), constrained_solutions.cend(),
         [&problem](const auto& a, const auto& b) {
             return objective(problem, a) < objective(problem, b);
         });

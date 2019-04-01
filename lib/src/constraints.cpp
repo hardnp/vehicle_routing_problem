@@ -62,5 +62,17 @@ bool satisfies_site_dependency(const Problem& prob, const Solution& sln) {
     }
     return satisfies;
 }
+
+bool satisfies_all(const Problem& prob, const Solution& sln) {
+    static std::vector<bool (*)(const Problem&, const Solution&)> checkers = {
+        satisfies_site_dependency, satisfies_capacity, satisfies_time_windows};
+
+    bool satisfied = true;
+    for (const auto& checker : checkers) {
+        satisfied &= checker(prob, sln);
+    }
+
+    return satisfied;
+}
 }  // namespace constraints
 }  // namespace vrp

@@ -51,12 +51,20 @@ uint32_t threshold(const Problem& prob) {
     return std::max(1u, static_cast<uint32_t>(prob.n_customers() * 0.05)) + 2u;
 }
 
+#define SEQUENTIAL 1
+
 inline void do_local_search(const tabu::LocalSearchMethods& ls,
                             std::vector<Solution>& slns,
                             tabu::TabuLists& lists) {
     assert(slns.size() == ls.size());
+#if SEQUENTIAL
+    for (size_t m = 0, size = ls.size(); m != size; ++m) {
+        ls[m](slns[m], lists);
+    }
+#else
     threading::parallel_for(ls.size(),
                             [&](size_t m) { ls[m](slns[m], lists); });
+#endif
 }
 
 inline std::vector<Solution> repeat(const Solution& sln, size_t times) {
