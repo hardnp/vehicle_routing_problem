@@ -5,6 +5,7 @@
 #include "logging.h"
 #include "objective.h"
 #include "solution.h"
+#include "threading.h"
 
 #include <algorithm>
 #include <fstream>
@@ -34,6 +35,8 @@ public:
 void print_fmt(double objective, int violated_time) {
     LOG_DEBUG << " SOLUTION: " << objective << " | " << violated_time << EOL;
 }
+
+constexpr const size_t INITIAL_SLN_COUNT = 10;
 
 }  // namespace
 
@@ -67,7 +70,8 @@ int main(int argc, char* argv[]) {
          heuristic < static_cast<int8_t>(vrp::InitialHeuristic::Last);
          ++heuristic) {
         auto heuristic_solutions = vrp::create_initial_solutions(
-            problem, static_cast<vrp::InitialHeuristic>(heuristic));
+            problem, static_cast<vrp::InitialHeuristic>(heuristic),
+            INITIAL_SLN_COUNT);
         solutions.insert(solutions.end(),
                          std::make_move_iterator(heuristic_solutions.begin()),
                          std::make_move_iterator(heuristic_solutions.end()));
@@ -100,12 +104,11 @@ int main(int argc, char* argv[]) {
     LOG_INFO << "Objective = " << objective(problem, best_initial_sln) << EOL;
 #endif
 
-    std::vector<vrp::Solution> improved_solutions = {};
-    improved_solutions.reserve(solutions.size());
-    for (const auto& sln : solutions) {
-        improved_solutions.emplace_back(std::move(create_improved_solution(
-            problem, sln, vrp::ImprovementHeuristic::Tabu)));
-    }
+    std::vector<vrp::Solution> improved_solutions(solutions.size());
+    vrp::threading::parallel_for(solutions.size(), [&](size_t i) {
+        improved_solutions[i] = std::move(create_improved_solution(
+            problem, solutions[i], vrp::ImprovementHeuristic::Tabu));
+    });
 
     auto best_sln = *std::min_element(
         improved_solutions.cbegin(), improved_solutions.cend(),

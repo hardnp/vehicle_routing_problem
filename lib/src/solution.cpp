@@ -70,4 +70,16 @@ void Solution::update_used_vehicles() {
         used_vehicles.emplace(vehicle_and_route.first);
     }
 }
+
+bool Solution::operator==(const Solution& other) {
+    if (this->routes.size() != other.routes.size()) {
+        return false;
+    }
+    for (size_t i = 0, size = this->routes.size(); i < size; ++i) {
+        if (this->routes[i] != other.routes[i]) {
+            return false;
+        }
+    }
+    return true;
+}
 }  // namespace vrp

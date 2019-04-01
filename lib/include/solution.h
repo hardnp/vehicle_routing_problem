@@ -35,5 +35,7 @@ public:
                                 size_t first_customer_index = 0);
 
     void update_used_vehicles();
+
+    bool operator==(const Solution& other);
 };
 }  // namespace vrp

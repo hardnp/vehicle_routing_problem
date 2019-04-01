@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <functional>
 #include <list>
 #include <numeric>
 #include <random>
@@ -410,9 +411,11 @@ T sum_route_part(const mat_t<T>& mat, ListIt first, ListIt last) {
 
 #define EXPERIMENTAL 1
 
-/// Solve basic (capacitated) VRP (CVRP) with insertion heuristic
+constexpr const double VRP_RANDOMNESS_THRESHOLD = 0.8;
+
+/// Solve basic (capacitated) VRP with insertion heuristic
 std::vector<std::tuple<size_t, size_t, std::list<size_t>>>
-solve_cvrp(const Heuristic& h) {
+solve_vrp(const Heuristic& h, bool random = false) {
     // depot_offset = 1 due to depot at index 0:
     auto typed_customers = group(h, 1);
     const auto& prob = h.prob();
@@ -430,6 +433,10 @@ solve_cvrp(const Heuristic& h) {
             vehicle_to_type[v] = pair.first;
         }
     }
+
+    thread_local std::random_device rd;
+    thread_local std::mt19937 g(rd());
+    thread_local std::uniform_real_distribution<> dist(0.0, 1.0);
 
     // Insertion heuristic, variation 2: c1 is not needed (?), c2 is minimized.
     // params of c2:
@@ -463,8 +470,12 @@ solve_cvrp(const Heuristic& h) {
                 for (const auto& c : unrouted) {
                     // skip if capacity is exceeded
                     if (!last_vehicle &&
-                        running_capacity < prob.customers[c].demand)
+                        running_capacity < prob.customers[c].demand) {
                         continue;
+                    }
+                    if (random && dist(g) > VRP_RANDOMNESS_THRESHOLD) {
+                        continue;
+                    }
                     std::list<double> ratings_c2{};
                     for (auto i = route.cbegin(), j = std::next(i);
                          j != route.cend(); ++i, ++j) {
@@ -586,7 +597,7 @@ select_seeds(const Heuristic& h) {
 
     // the customer on the route with the largest seed weight becomes the seed
     // point of the route
-    auto routes = solve_cvrp(h);
+    auto routes = solve_vrp(h);
     // TODO: in fact, we don't need routes...
     for (auto& vehicle_route : routes) {
         auto& route = std::get<2>(vehicle_route);
@@ -631,10 +642,11 @@ select_seeds(const Heuristic& h) {
 }
 
 std::vector<Solution> construct_solutions(const Heuristic& h, size_t count) {
-    count = 1;  // TODO: add randomness
+    const bool solve_randomly = count > 1;
     std::vector<Solution> solutions(count);
-    for (auto& sln : solutions) {
-        sln = std::move(routes_to_sln(h.prob(), solve_cvrp(h)));
+    for (size_t i = 0, size = solutions.size(); i < size; ++i) {
+        solutions[i] = std::move(
+            routes_to_sln(h.prob(), solve_vrp(h, i && solve_randomly)));
     }
     return solutions;
 }
