@@ -434,10 +434,10 @@ solve_vrp(const Heuristic& h, bool random = false) {
         }
     }
 
-    // thread_local std::random_device rd;
-    // thread_local std::mt19937 g(rd());
-    thread_local std::mt19937 g;
-    thread_local std::uniform_real_distribution<> dist(0.0, 1.0);
+    // static std::random_device rd;
+    // static std::mt19937 g(rd());
+    static std::mt19937 g;
+    static std::uniform_real_distribution<> dist(0.0, 1.0);
 
     // Insertion heuristic, variation 2: c1 is not needed (?), c2 is minimized.
     // params of c2:
