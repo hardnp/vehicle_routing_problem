@@ -474,7 +474,8 @@ solve_vrp(const Heuristic& h, bool random = false) {
                         running_capacity < prob.customers[c].demand) {
                         continue;
                     }
-                    if (random && dist(g) > VRP_RANDOMNESS_THRESHOLD) {
+                    if (!last_vehicle && random &&
+                        dist(g) > VRP_RANDOMNESS_THRESHOLD) {
                         continue;
                     }
                     std::list<double> ratings_c2{};
