@@ -26,6 +26,8 @@ constexpr const uint32_t ROUTE_SAVING_ITERS = 5 * MULTIPLIER;
 constexpr const uint32_t INTRA_RELOCATION_ITERS = 15 * MULTIPLIER;
 constexpr const double TIME_WINDOWS_PENALTY_BASE = 1.2;
 
+constexpr const uint32_t CONSTRAINTS_FIX_ITERS = 0.1 * TABU_SEARCH_ITERS;
+
 void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
                        size_t i) {
     switch (i) {
@@ -86,10 +88,13 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     best_sln.update_used_vehicles();
     assert(!best_sln.customer_owners.empty());
 
+    const auto sqr_objective_baseline = std::pow(objective(prob, best_sln), 2);
+
     std::vector<Solution> slns = repeat(best_sln, ls.size());
     tabu::TabuLists lists{};
 
     int tw_violation_count = 1;
+    auto constraints_count = CONSTRAINTS_FIX_ITERS;
 
     // i - iterations counter, can be reset if improvement found
     // ci - constant iterations counter, always counts forward
@@ -97,6 +102,11 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
          ++i, ++ci) {
 
         ls.penalize_tw(std::pow(TIME_WINDOWS_PENALTY_BASE, tw_violation_count));
+        --constraints_count;
+        if (!constraints_count) {
+            ls.penalize_tw(sqr_objective_baseline);
+            constraints_count = CONSTRAINTS_FIX_ITERS;
+        }
 
         auto updated_lists = lists;
         do_local_search(ls, slns, updated_lists);
@@ -142,17 +152,19 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     }
 
     // post-optimization phase. drastically penalize for TW violation
-    ls.penalize_tw(std::pow(objective(prob, best_sln), 2));
+    ls.penalize_tw(sqr_objective_baseline);
 
-    slns = repeat(best_sln, ls.size());
-    // no tabu is required now
-    lists = tabu::TabuLists();
-    do_local_search(ls, slns, lists);
+    for (size_t i = 0; i < 2; ++i) {
+        slns = repeat(best_sln, ls.size());
+        // no tabu is required now
+        lists = tabu::TabuLists();
+        do_local_search(ls, slns, lists);
 
-    best_sln = *std::min_element(slns.cbegin(), slns.cend(), sln_comp);
+        best_sln = *std::min_element(slns.cbegin(), slns.cend(), sln_comp);
 
-    // TODO: add US heuristic as well
-    ls.intra_relocate(best_sln);
+        // TODO: add US heuristic as well
+        ls.intra_relocate(best_sln);
+    }
 
     return best_sln;
 }

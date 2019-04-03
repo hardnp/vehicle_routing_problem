@@ -513,14 +513,10 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
                            m_prob.vehicles[sln.routes[r1].first].capacity,
                        route2_capacity =
                            m_prob.vehicles[sln.routes[r2].first].capacity;
-            impossible_move |= (demand1_after > route1_capacity ||
-                                demand2_after > route2_capacity);
-#if 0  // TODO: enable
-            impossible_move |= (demand1_after > route1_capacity ||
-                                demand2_after > route2_capacity) &&
-                               (demand1_after + demand2_after >
-                                demand1_before + demand2_before);
-#endif
+            impossible_move |= (demand1_after > route1_capacity &&
+                                demand1_after > demand1_before);
+            impossible_move |= (demand2_after > route2_capacity &&
+                                demand2_after > demand2_before);
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
                 // move is good
