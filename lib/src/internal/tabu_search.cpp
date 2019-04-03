@@ -83,10 +83,14 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     tabu::LocalSearchMethods ls(prob);
 
     Solution best_sln = initial_sln;
+
     // init temporary information:
     best_sln.update_customer_owners(prob);
     best_sln.update_used_vehicles();
     assert(!best_sln.customer_owners.empty());
+
+    // keep track of best feasible solution as well
+    Solution best_feasible_sln = best_sln;
 
     const auto sqr_objective_baseline = std::pow(objective(prob, best_sln), 2);
 
@@ -128,11 +132,16 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
             tw_violation_count = 1;
         }
 
-        auto curr_sln_copy = curr_sln;
-
         // found new best: reset best solution, reset iter counter to 0
         if (objective(prob, curr_sln) < objective(prob, best_sln)) {
-            best_sln = std::move(curr_sln);
+            best_sln = curr_sln;
+            i = 0;
+        }
+
+        // found new feasible best: reset best feasible, reset iter counter to 0
+        if (constraints::satisfies_all(prob, curr_sln) &&
+            objective(prob, curr_sln) < objective(prob, best_feasible_sln)) {
+            best_feasible_sln = curr_sln;
             i = 0;
         }
 
@@ -140,33 +149,42 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
         const bool perform_intra_relocation = i > INTRA_RELOCATION_ITERS;
 
         if (perform_route_saving) {
-            ls.route_save(curr_sln_copy, route_saving_threshold);
+            ls.route_save(curr_sln, route_saving_threshold);
         }
         if (perform_intra_relocation) {
-            ls.intra_relocate(curr_sln_copy);
+            ls.intra_relocate(curr_sln);
         }
 
         if (perform_route_saving || perform_intra_relocation) {
-            slns = repeat(curr_sln_copy, ls.size());
+            slns = repeat(curr_sln, ls.size());
         }
     }
 
-    // post-optimization phase. drastically penalize for TW violation
-    ls.penalize_tw(sqr_objective_baseline);
-
-    for (size_t i = 0; i < 2; ++i) {
-        slns = repeat(best_sln, ls.size());
-        // no tabu is required now
+    thread_local const auto do_post_optimization = [&](Solution& best_sln) {
+        // post-optimization phase. drastically penalize for TW violation
+        ls.penalize_tw(sqr_objective_baseline);
         lists = tabu::TabuLists();
-        do_local_search(ls, slns, lists);
 
-        best_sln = *std::min_element(slns.cbegin(), slns.cend(), sln_comp);
+        for (size_t i = 0; i < 2; ++i) {
+            slns = repeat(best_sln, ls.size());
+            // no tabu is required now
+            do_local_search(ls, slns, lists);
 
-        // TODO: add US heuristic as well
-        ls.intra_relocate(best_sln);
+            best_sln = *std::min_element(slns.cbegin(), slns.cend(), sln_comp);
+
+            // TODO: add US heuristic as well
+            ls.intra_relocate(best_sln);
+        }
+    };
+
+    do_post_optimization(best_sln);
+    do_post_optimization(best_feasible_sln);
+
+    if (constraints::satisfies_all(prob, best_sln) ||
+        !constraints::satisfies_all(prob, best_feasible_sln)) {
+        return std::min(best_sln, best_feasible_sln, sln_comp);
     }
-
-    return best_sln;
+    return best_feasible_sln;
 }
 }  // namespace detail
 }  // namespace vrp
