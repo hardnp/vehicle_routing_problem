@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <set>
 #include <stack>
 #include <unordered_set>
@@ -15,8 +16,7 @@
 namespace vrp {
 namespace tabu {
 
-// TODO: will this work for asymmetric cases: (customer, route) pairs?
-#define USE_HASH_SET 0
+#define USE_HASH_SET 1
 
 template<typename T, int Tenure = 0> class TabuList {
     struct Hash;
@@ -38,17 +38,29 @@ template<typename T, int Tenure = 0> class TabuList {
         }
     };
 
-    struct Hash {
 #if USE_HASH_SET
+    struct Hash {
+#if 0  // TODO: gives results != std::set results
+        static std::hash<size_t> hasher;
+        // FIXME: add boost credits
+        static size_t hash_one(size_t seed, size_t value) {
+            // original idea from boost hash_combine:
+            // https://www.boost.org/doc/libs/1_55_0/doc/html/hash/reference.html#boost.hash_combine
+            return hasher(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
         inline size_t operator()(const Entry& e) const {
-            return e.value.first ^ e.value.second;
+            size_t seed = 0;
+            seed ^= hash_one(seed, e.value.first);
+            seed ^= hash_one(seed, e.value.second);
+            return seed;
         }
 #else
-        inline T operator()(const Entry& e) const { return e.value; }
+        inline size_t operator()(const Entry& e) const {
+            return (e.value.first << 16) ^ e.value.second;
+        }
 #endif
     };
 
-#if USE_HASH_SET
     using set_t = std::unordered_set<Entry, Hash>;
 #else
     using set_t = std::set<Entry>;
