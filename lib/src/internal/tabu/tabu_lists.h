@@ -5,67 +5,58 @@
 #include <functional>
 #include <set>
 #include <stack>
+#include <type_traits>
 #include <unordered_set>
 #include <utility>
 
 // can be overriden from the outside
 #ifndef TABU_TENURE
 #define TABU_TENURE 15
+#define PRESERVE_TENURE 7
 #endif
 
 namespace vrp {
 namespace tabu {
 
+namespace detail {
 #define USE_HASH_SET 1
 
-template<typename T, int Tenure = 0> class TabuList {
-    struct Hash;
-    struct Entry {
-        T value;
-        int count = Tenure;
-        Hash f;
+template<typename T, int Tenure> struct Entry {
+    T value;
+    int count = Tenure;
 
-        Entry() = delete;
-        Entry(const T& v) : value(v) {}
-        bool operator==(const Entry& other) const {
-            return f(value) == f(other.value);
-        }
-        bool operator<(const Entry& other) const {
-            return f(value) < f(other.value);
-        }
-        bool operator==(const T& other_value) const {
-            return f(value) == f(other_value);
-        }
-    };
+    Entry() = delete;
+    Entry(const T& v) : value(v) {}
+    bool operator==(const Entry& other) const { return value == other.value; }
+    bool operator<(const Entry& other) const { return value < other.value; }
+    bool operator==(const T& other_value) const { return value == other_value; }
+};
 
 #if USE_HASH_SET
-    struct Hash {
-#if 0  // TODO: gives results != std::set results
-        static std::hash<size_t> hasher;
-        // FIXME: add boost credits
-        static size_t hash_one(size_t seed, size_t value) {
-            // original idea from boost hash_combine:
-            // https://www.boost.org/doc/libs/1_55_0/doc/html/hash/reference.html#boost.hash_combine
-            return hasher(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        }
-        inline size_t operator()(const Entry& e) const {
-            size_t seed = 0;
-            seed ^= hash_one(seed, e.value.first);
-            seed ^= hash_one(seed, e.value.second);
-            return seed;
-        }
-#else
-        inline size_t operator()(const Entry& e) const {
-            return (e.value.first << 16) ^ e.value.second;
-        }
-#endif
-    };
+template<typename U, int Tenure = 0> struct Hash {};
 
-    using set_t = std::unordered_set<Entry, Hash>;
-#else
-    using set_t = std::set<Entry>;
-#endif
+template<int Tenure> struct Hash<std::pair<size_t, size_t>, Tenure> {
+    inline size_t
+    operator()(const Entry<std::pair<size_t, size_t>, Tenure>& e) const {
+        return (e.value.first << 16) ^ e.value.second;
+    }
+};
 
+template<int Tenure> struct Hash<size_t, Tenure> {
+    inline size_t operator()(const Entry<size_t, Tenure>& e) const {
+        return e.value;
+    }
+};
+#endif
+}  // namespace detail
+
+template<typename T, int Tenure> class TabuList {
+#if USE_HASH_SET
+    using set_t =
+        std::unordered_set<detail::Entry<T, Tenure>, detail::Hash<T, Tenure>>;
+#else
+    using set_t = std::set<detail::Entry<T, Tenure>>;
+#endif
     set_t entries;
 
     inline set_t diff(const set_t& lhs, const set_t& rhs) {
@@ -128,34 +119,56 @@ public:
 
 class TabuLists {
     using tabu_list_t = TabuList<std::pair<size_t, size_t>, TABU_TENURE>;
+    using preserve_list_t = TabuList<size_t, PRESERVE_TENURE>;
 
 public:
+    // tabu lists. each entry depends on a used heuristic
     // pair of customer && route
     tabu_list_t exchange = {};
     // pair of customer && route
     tabu_list_t relocate = {};
-    // pair of customer && route
-    tabu_list_t relocate_split = {};
     // pair of customers
     tabu_list_t two_opt = {};
     // pair of customers
     tabu_list_t cross = {};
+    // pair of customer && route
+    tabu_list_t relocate_split = {};
+
+    // preserve lists. each entry is a customer index
+    preserve_list_t pr_exchange = {};
+    preserve_list_t pr_relocate = {};
+    preserve_list_t pr_two_opt = {};
+    preserve_list_t pr_cross = {};
+    preserve_list_t pr_relocate_split = {};
 
     TabuLists& operator--() {
         exchange.decrement();
         relocate.decrement();
-        relocate_split.decrement();
         two_opt.decrement();
         cross.decrement();
+        relocate_split.decrement();
+
+        pr_exchange.decrement();
+        pr_relocate.decrement();
+        pr_two_opt.decrement();
+        pr_cross.decrement();
+        pr_relocate_split.decrement();
+
         return *this;
     }
 
     void clear() {
         exchange.clear();
         relocate.clear();
-        relocate_split.clear();
         two_opt.clear();
         cross.clear();
+        relocate_split.clear();
+
+        pr_exchange.clear();
+        pr_relocate.clear();
+        pr_two_opt.clear();
+        pr_cross.clear();
+        pr_relocate_split.clear();
     }
 };
 }  // namespace tabu

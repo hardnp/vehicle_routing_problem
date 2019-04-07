@@ -13,8 +13,8 @@ namespace tabu {
 class LocalSearchMethods {
     const Problem& m_prob;
 
-    using methods_t = std::vector<std::function<void(Solution&, TabuLists&)>>;
-    methods_t m_methods = methods_t(4);
+    using methods_t = std::vector<std::function<bool(Solution&, TabuLists&)>>;
+    methods_t m_methods = methods_t(6);
 
     double m_tw_penalty = 0.0;  ///< penalty for time windows violation
 
@@ -36,11 +36,12 @@ public:
     const methods_t::value_type& operator[](size_t i) const;
 
     // main local search heuristics:
-    void exchange(Solution& sln, TabuLists& lists);
-    void relocate(Solution& sln, TabuLists& lists);
-    void relocate_split(Solution& sln, TabuLists& lists);
-    void two_opt(Solution& sln, TabuLists& lists);
-    void cross(Solution& sln, TabuLists& lists);
+    bool exchange(Solution& sln, TabuLists& lists);
+    bool relocate(Solution& sln, TabuLists& lists);
+    bool two_opt(Solution& sln, TabuLists& lists);
+    bool cross(Solution& sln, TabuLists& lists);
+    bool relocate_new_route(Solution& sln, TabuLists& lists);
+    bool relocate_split(Solution& sln, TabuLists& lists);
     std::string str(size_t i) const;
 
     // additional heuristics:

@@ -31,7 +31,7 @@ void Solution::update_times(const Problem& prob) {
             t.start = std::max(t.arrive, customers[c].hard_tw.first);
             t.finish = t.start + customers[c].service_time;
 
-            start_time += t.finish + prob.times[c][next_c];
+            start_time = t.finish + prob.times[c][next_c];
 
             time.emplace_back(std::move(t));
         }

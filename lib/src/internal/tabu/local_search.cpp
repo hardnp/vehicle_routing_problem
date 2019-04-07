@@ -20,6 +20,8 @@ namespace {
 // alternative tabu entries: if 1, "forbids" bad moves; if 0, "keeps" good moves
 #define ALT_TABU_ENTRIES 1  // TODO: debug if this works
 
+#define USE_PRESERVE_ENTRIES 1
+
 // true if vehicle can deliver to customer, false otherwise
 inline bool site_dependent(const Problem& prob, size_t vehicle,
                            size_t customer) {
@@ -212,16 +214,15 @@ LocalSearchMethods::LocalSearchMethods(const Problem& prob) noexcept
     : m_prob(prob) {
     m_methods[0] = std::bind(&LocalSearchMethods::relocate, this,
                              std::placeholders::_1, std::placeholders::_2);
-    // TODO: do relocate_split
-    /*
-    m_methods[1] = std::bind(&LocalSearchMethods::relocate_split, this,
-                             std::placeholders::_1, std::placeholders::_2);
-    */
     m_methods[1] = std::bind(&LocalSearchMethods::exchange, this,
                              std::placeholders::_1, std::placeholders::_2);
     m_methods[2] = std::bind(&LocalSearchMethods::two_opt, this,
                              std::placeholders::_1, std::placeholders::_2);
     m_methods[3] = std::bind(&LocalSearchMethods::cross, this,
+                             std::placeholders::_1, std::placeholders::_2);
+    m_methods[4] = std::bind(&LocalSearchMethods::relocate_new_route, this,
+                             std::placeholders::_1, std::placeholders::_2);
+    m_methods[5] = std::bind(&LocalSearchMethods::relocate_split, this,
                              std::placeholders::_1, std::placeholders::_2);
 }
 
@@ -252,18 +253,10 @@ operator[](size_t i) const {
     return m_methods[i];
 }
 
-void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
+bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
     static double best_ever_value = std::numeric_limits<double>::max();
 
-    const auto vehicles_size = m_prob.n_vehicles();
-    std::unordered_set<Solution::VehicleIndex> unused_vehicles;
-    assert(vehicles_size >= sln.used_vehicles.size());
-    unused_vehicles.reserve(vehicles_size - sln.used_vehicles.size());
-    for (size_t v = 0; v < vehicles_size; ++v) {
-        if (sln.used_vehicles.find(v) == sln.used_vehicles.cend()) {
-            unused_vehicles.emplace(v);
-        }
-    }
+    bool improved = false;
 
     const auto size = m_prob.n_customers();
     for (size_t customer = 1; customer < size; ++customer) {
@@ -347,6 +340,7 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
 
             // aspiration criteria
             bool impossible_move = lists.relocate.has(customer, r_out) &&
+                                   lists.pr_relocate.has(customer) &&
                                    cost_after >= best_ever_value;
 
             const auto out_capacity =
@@ -363,7 +357,11 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
 #else
                 lists.relocate.emplace(customer, r_out);
 #endif
+#if USE_PRESERVE_ENTRIES
+                lists.pr_relocate.emplace(customer);
+#endif
                 best_ever_value = std::min(best_ever_value, cost_after);
+                improved = true;
                 break;
             } else {
                 // move is bad - roll back the changes
@@ -371,84 +369,116 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                 route_out.erase(inserted);
             }
         }
+    }
+    delete_loops_after_relocate(sln, lists);
+    sln.update_customer_owners(m_prob);
+    return improved;
+}
 
-        // check if creating a new route is better than any relocation
-        {
-            // indices might have changed during "for(neighbours)" loop
-            std::tie(r_in, c_index) = sln.customer_owners[customer];
+bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists) {
+    static double best_ever_value = std::numeric_limits<double>::max();
 
-            if (sln.routes.size() >= vehicles_size) {
-                continue;
+    const auto vehicles_size = m_prob.n_vehicles();
+    if (sln.routes.size() >= vehicles_size) {
+        return false;
+    }
+
+    std::unordered_set<Solution::VehicleIndex> unused_vehicles;
+    assert(vehicles_size >= sln.used_vehicles.size());
+    unused_vehicles.reserve(vehicles_size - sln.used_vehicles.size());
+    for (size_t v = 0; v < vehicles_size; ++v) {
+        if (sln.used_vehicles.find(v) == sln.used_vehicles.cend()) {
+            unused_vehicles.emplace(v);
+        }
+    }
+    if (unused_vehicles.empty()) {
+        return false;
+    }
+
+    bool improved = false;
+
+    const auto size = m_prob.n_customers();
+    for (size_t customer = 1; customer < size; ++customer) {
+        size_t r_in = 0, c_index = 0;
+        std::tie(r_in, c_index) = sln.customer_owners[customer];
+        if (is_loop(sln.routes[r_in].second)) {
+            continue;
+        }
+
+        // find suitable vehicle
+        bool found_suitable_vehicle = false;
+        size_t used_vehicle = std::numeric_limits<size_t>::max();
+        for (auto v : unused_vehicles) {
+            const bool enough_capacity = m_prob.vehicles[v].capacity >=
+                                         m_prob.customers[customer].demand;
+            if (enough_capacity && site_dependent(m_prob, v, customer)) {
+                sln.routes.emplace_back(v, add_depots({customer}));
+                used_vehicle = v;
+                unused_vehicles.erase(v);  // TODO: is it safe though?
+                found_suitable_vehicle = true;
+                break;
             }
+        }
+        if (!found_suitable_vehicle) {
+            continue;
+        }
+        assert(used_vehicle != std::numeric_limits<size_t>::max());
 
-            // find suitable vehicle
-            bool found_suitable_vehicle = false;
-            size_t used_vehicle = std::numeric_limits<size_t>::max();
-            for (auto v : unused_vehicles) {
-                const bool enough_capacity = m_prob.vehicles[v].capacity >=
-                                             m_prob.customers[customer].demand;
-                if (enough_capacity && site_dependent(m_prob, v, customer)) {
-                    sln.routes.emplace_back(v, add_depots({customer}));
-                    used_vehicle = v;
-                    unused_vehicles.erase(v);  // TODO: is it safe though?
-                    found_suitable_vehicle = true;
-                    break;
-                }
-            }
-            if (!found_suitable_vehicle) {
-                continue;
-            }
-            assert(used_vehicle != std::numeric_limits<size_t>::max());
+        // we assume there's a suitable vehicle at this point
+        auto& route_in = sln.routes[r_in].second;
 
-            // we assume there's a suitable vehicle at this point
+        auto it_in_before = atit(route_in, c_index - 1),
+             it_in_after = atit(route_in, c_index + 1),
+             it_out = atit(sln.routes.back().second, 1);
 
-            auto& route_in = sln.routes[r_in].second;
+        const auto cost_before = distance_on_route(
+            m_prob, m_tw_penalty, it_in_before, std::next(it_in_after));
 
-            auto it_in_before = atit(route_in, c_index - 1),
-                 it_in_after = atit(route_in, c_index + 1),
-                 it_out = atit(sln.routes.back().second, 1);
+        auto erased = route_in.erase(std::next(it_in_before));
 
-            const auto cost_before = distance_on_route(
-                m_prob, m_tw_penalty, it_in_before, std::next(it_in_after));
+        const auto cost_after =
+            distance_on_route(m_prob, m_tw_penalty, it_in_before,
+                              std::next(it_in_after)) +
+            distance_on_route(m_prob, m_tw_penalty, std::prev(it_out),
+                              std::next(it_out, 2));
 
-            auto erased = route_in.erase(std::next(it_in_before));
+        const bool impossible_move =
+            lists.pr_relocate.has(customer) && cost_after >= best_ever_value;
 
-            const auto cost_after =
-                distance_on_route(m_prob, m_tw_penalty, it_in_before,
-                                  std::next(it_in_after)) +
-                distance_on_route(m_prob, m_tw_penalty, std::prev(it_out),
-                                  std::next(it_out, 2));
-
-            // decide whether move is good
-            if (cost_after < cost_before) {
-                // move is good
-                sln.update_customer_owners(m_prob, r_in);
-                sln.update_customer_owners(m_prob, sln.routes.size() - 1);
-                sln.used_vehicles.emplace(used_vehicle);
+        // decide whether move is good
+        if (!impossible_move && cost_after < cost_before) {
+            // move is good
+            sln.update_customer_owners(m_prob, r_in);
+            sln.update_customer_owners(m_prob, sln.routes.size() - 1);
+            sln.used_vehicles.emplace(used_vehicle);
 #if ALT_TABU_ENTRIES
-                lists.relocate.emplace(customer, r_in);
-#else
-                lists.relocate.emplace(customer, r_out);
+            lists.relocate.emplace(customer, r_in);
 #endif
-                best_ever_value = std::min(best_ever_value, cost_after);
-            } else {
-                // move is bad - roll back the changes
-                route_in.insert(erased, customer);
-                sln.routes.pop_back();
-                unused_vehicles.emplace(used_vehicle);
-            }
+#if USE_PRESERVE_ENTRIES
+            lists.pr_relocate.emplace(customer);
+#endif
+            improved = true;
+            best_ever_value = cost_after;
+        } else {
+            // move is bad - roll back the changes
+            route_in.insert(erased, customer);
+            sln.routes.pop_back();
+            unused_vehicles.emplace(used_vehicle);
         }
     }
     delete_loops_after_relocate(sln, lists);
     sln.update_customer_owners(m_prob);
+    return improved;
 }
 
-void LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
-    return;
+bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
+    return false;
 }
 
-void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
+bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
     static double best_ever_value = std::numeric_limits<double>::max();
+
+    bool improved = false;
 
     const auto size = m_prob.n_customers();
     for (size_t customer = 1; customer < size; ++customer) {
@@ -506,7 +536,9 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
 
             // aspiration criteria
             bool impossible_move = (lists.exchange.has(customer, r2) ||
-                                    lists.exchange.has(neighbour, r1)) &&
+                                    lists.exchange.has(neighbour, r1) ||
+                                    lists.pr_exchange.has(customer) ||
+                                    lists.pr_exchange.has(neighbour)) &&
                                    cost_after >= best_ever_value;
 
             const auto route1_capacity =
@@ -529,8 +561,12 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
                 lists.exchange.emplace(customer, r2);
                 lists.exchange.emplace(neighbour, r1);
 #endif
-
+#if USE_PRESERVE_ENTRIES
+                lists.pr_exchange.emplace(customer);
+                lists.pr_exchange.emplace(neighbour);
+#endif
                 best_ever_value = std::min(best_ever_value, cost_after);
+                improved = true;
                 break;
             } else {
                 // move is bad - roll back the changes
@@ -538,10 +574,13 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
             }
         }
     }
+    return improved;
 }
 
-void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
+bool LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
     static double best_ever_value = std::numeric_limits<double>::max();
+
+    bool improved = false;
 
     for (size_t ri = 0; ri < sln.routes.size(); ++ri) {
         auto& route = sln.routes[ri].second;
@@ -558,8 +597,7 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
                 // skip depots && start from i + 1
                 for (auto k = std::next(i); k != std::prev(route.end()); ++k) {
 #if ALT_TABU_ENTRIES
-                    size_t ic = *i, kc = *k, ic_next = *std::next(i),
-                           kc_next = *std::next(k);
+                    size_t ic_next = *std::next(i), kc_next = *std::next(k);
 #endif
 
                     // cost before: (i-1)->i->(i+1) + (k-1)->k->(k+1)
@@ -572,7 +610,9 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
                         paired_distance_on_route(m_prob, m_tw_penalty, i, k);
 
                     // aspiration
-                    const bool impossible_move = lists.two_opt.has(*i, *k) &&
+                    const bool impossible_move = (lists.two_opt.has(*i, *k) ||
+                                                  lists.pr_two_opt.has(*i) ||
+                                                  lists.pr_two_opt.has(*k)) &&
                                                  cost_after >= best_ever_value;
 
                     // decide whether move is good
@@ -581,14 +621,18 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
                         found_new_best = true;
                         // forbid previously existing edges
 #if ALT_TABU_ENTRIES
-                        lists.two_opt.emplace(ic, ic_next);
-                        lists.two_opt.emplace(kc, kc_next);
+                        lists.two_opt.emplace(*i, ic_next);
+                        lists.two_opt.emplace(*k, kc_next);
 #else
                         lists.two_opt.emplace(*i, *std::next(i));
                         lists.two_opt.emplace(*k, *std::next(k));
 #endif
-
+#if USE_PRESERVE_ENTRIES
+                        lists.pr_two_opt.emplace(*i);
+                        lists.pr_two_opt.emplace(*k);
+#endif
                         best_ever_value = std::min(best_ever_value, cost_after);
+                        improved = false;
                         break;
                     } else {
                         // move is bad - roll back the changes
@@ -602,10 +646,13 @@ void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
         }
     }
     sln.update_customer_owners(m_prob);
+    return improved;
 }
 
-void LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
+bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
     static double best_ever_value = std::numeric_limits<double>::max();
+
+    bool improved = false;
 
     const auto size = m_prob.n_customers();
     for (size_t customer = 1; customer < size; ++customer) {
@@ -669,7 +716,9 @@ void LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
 
             // aspiration criteria
             bool impossible_move = (lists.cross.has(customer, r2) ||
-                                    lists.cross.has(neighbour, r1)) &&
+                                    lists.cross.has(neighbour, r1) ||
+                                    lists.pr_cross.has(customer) ||
+                                    lists.pr_cross.has(neighbour)) &&
                                    cost_after >= best_ever_value;
 
             const auto route1_capacity =
@@ -694,8 +743,12 @@ void LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
                 lists.cross.emplace(*it1, *std::next(it1));
                 lists.cross.emplace(*it2, *std::next(it2));
 #endif
-
+#if USE_PRESERVE_ENTRIES
+                lists.pr_cross.emplace(*it1);
+                lists.pr_cross.emplace(*it2);
+#endif
                 best_ever_value = std::min(best_ever_value, cost_after);
+                improved = true;
                 break;
             } else {
                 // move is bad - roll back the changes
@@ -703,6 +756,7 @@ void LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
             }
         }
     }
+    return improved;
 }
 
 std::string LocalSearchMethods::str(size_t i) const {

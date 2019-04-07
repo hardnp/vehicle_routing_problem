@@ -33,15 +33,27 @@ void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
     switch (i) {
     case 0:
         lists.relocate = std::move(new_lists.relocate);
+        lists.pr_relocate = std::move(new_lists.pr_relocate);
         break;
     case 1:
         lists.exchange = std::move(new_lists.exchange);
+        lists.pr_exchange = std::move(new_lists.pr_exchange);
         break;
     case 2:
         lists.two_opt = std::move(new_lists.two_opt);
+        lists.pr_two_opt = std::move(new_lists.pr_two_opt);
         break;
     case 3:
         lists.cross = std::move(new_lists.cross);
+        lists.pr_cross = std::move(new_lists.pr_cross);
+        break;
+    case 4:
+        lists.relocate = std::move(new_lists.relocate);
+        lists.pr_relocate = std::move(new_lists.pr_relocate);
+        break;
+    case 5:
+        lists.relocate_split = std::move(new_lists.relocate_split);
+        lists.pr_relocate_split = std::move(new_lists.pr_relocate_split);
         break;
     default:
         throw std::out_of_range("tabu list index out of range");
@@ -54,11 +66,11 @@ uint32_t threshold(const Problem& prob) {
 }
 
 inline void do_local_search(const tabu::LocalSearchMethods& ls,
-                            std::vector<Solution>& slns,
-                            tabu::TabuLists& lists) {
+                            std::vector<Solution>& slns, tabu::TabuLists& lists,
+                            std::vector<bool>& was_improved) {
     assert(slns.size() == ls.size());
     for (size_t m = 0, size = ls.size(); m != size; ++m) {
-        ls[m](slns[m], lists);
+        was_improved[m] = ls[m](slns[m], lists);
     }
 }
 
@@ -74,8 +86,26 @@ inline std::vector<Solution> repeat(const Solution& sln, size_t times) {
 Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     // capture-by-ref is guaranteed to work because Problem class doesn't change
     // at this point throughout the whole application run
-    thread_local const auto sln_comp = [&prob](const auto& a, const auto& b) {
+    thread_local const auto less = [&prob](const auto& a, const auto& b) {
         return objective(prob, a) < objective(prob, b);
+    };
+
+    // find min element in improved solutions
+    thread_local const auto min_element = [](const std::vector<Solution>& slns,
+                                             const std::vector<bool>& impr) {
+        if (slns.empty()) {
+            return slns.cend();
+        }
+        auto min = slns.cbegin();
+        for (auto first = slns.cbegin() + 1; first != slns.cend(); ++first) {
+            if (!impr[std::distance(slns.cbegin(), first)]) {
+                continue;
+            }
+            if (less(*first, *min)) {
+                min = first;
+            }
+        }
+        return min;
     };
 
     const auto route_saving_threshold = threshold(prob);
@@ -95,6 +125,7 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     const auto sqr_objective_baseline = std::pow(objective(prob, best_sln), 2);
 
     std::vector<Solution> slns = repeat(best_sln, ls.size());
+    std::vector<bool> was_improved(ls.size(), false);
     tabu::TabuLists lists{};
 
     int tw_violation_count = 1;
@@ -106,6 +137,8 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
          ++i, ++ci) {
 
         ls.penalize_tw(std::pow(TIME_WINDOWS_PENALTY_BASE, tw_violation_count));
+
+        // TODO: fix this
         --constraints_count;
         if (!constraints_count) {
             ls.penalize_tw(sqr_objective_baseline);
@@ -113,10 +146,15 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
         }
 
         auto updated_lists = lists;
-        do_local_search(ls, slns, updated_lists);
+        do_local_search(ls, slns, updated_lists, was_improved);
 
-        auto min_sln_it =
-            std::min_element(slns.cbegin(), slns.cend(), sln_comp);
+        // if nothing was improved, continue
+        if (std::all_of(was_improved.cbegin(), was_improved.cend(),
+                        [](bool v) { return !v; })) {
+            continue;
+        }
+
+        auto min_sln_it = min_element(slns, was_improved);
 
         // TODO: check if this is required. doesn't seem like it's working
         std::vector<Solution> feasible_slns;
@@ -127,8 +165,7 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
             }
             feasible_slns.emplace_back(sln);
         }
-        auto min_feasible_sln_it = std::min_element(
-            feasible_slns.cbegin(), feasible_slns.cend(), sln_comp);
+        auto min_feasible_sln_it = min_element(feasible_slns, was_improved);
 
         --lists;
 
@@ -176,14 +213,14 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     thread_local const auto do_post_optimization = [&](Solution& best_sln) {
         // post-optimization phase. drastically penalize for TW violation
         ls.penalize_tw(sqr_objective_baseline);
-        lists = tabu::TabuLists();
 
         for (size_t i = 0; i < 2; ++i) {
+            lists = tabu::TabuLists();
             slns = repeat(best_sln, ls.size());
             // no tabu is required now
-            do_local_search(ls, slns, lists);
+            do_local_search(ls, slns, lists, was_improved);
 
-            best_sln = *std::min_element(slns.cbegin(), slns.cend(), sln_comp);
+            best_sln = *std::min_element(slns.cbegin(), slns.cend(), less);
 
             // TODO: add US heuristic as well
             ls.intra_relocate(best_sln);
@@ -195,7 +232,7 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
 
     if (constraints::satisfies_all(prob, best_sln) ||
         !constraints::satisfies_all(prob, best_feasible_sln)) {
-        return std::min(best_sln, best_feasible_sln, sln_comp);
+        return std::min(best_sln, best_feasible_sln, less);
     }
     return best_feasible_sln;
 }

@@ -10,7 +10,8 @@
 namespace vrp {
 namespace threading {
 
-#if USE_TBB
+// use TBB in release mode only
+#if USE_TBB && defined(NDEBUG)
 template<typename T, typename Callable> void parallel_for(T iters, Callable f) {
     tbb::parallel_for(T(0), iters, [&](T i) { f(i); },
                       tbb::static_partitioner{});
