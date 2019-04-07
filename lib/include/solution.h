@@ -36,6 +36,8 @@ public:
 
     void update_used_vehicles();
 
-    bool operator==(const Solution& other);
+    bool operator==(const Solution& other) const;
+
+    explicit operator bool();
 };
 }  // namespace vrp

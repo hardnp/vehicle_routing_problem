@@ -118,6 +118,18 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
         auto min_sln_it =
             std::min_element(slns.cbegin(), slns.cend(), sln_comp);
 
+        // TODO: check if this is required. doesn't seem like it's working
+        std::vector<Solution> feasible_slns;
+        feasible_slns.reserve(slns.size());
+        for (const auto& sln : slns) {
+            if (!constraints::satisfies_all(prob, sln)) {
+                continue;
+            }
+            feasible_slns.emplace_back(sln);
+        }
+        auto min_feasible_sln_it = std::min_element(
+            feasible_slns.cbegin(), feasible_slns.cend(), sln_comp);
+
         --lists;
 
         update_tabu_lists(lists, updated_lists,
@@ -139,9 +151,10 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
         }
 
         // found new feasible best: reset best feasible, reset iter counter to 0
-        if (constraints::satisfies_all(prob, curr_sln) &&
-            objective(prob, curr_sln) < objective(prob, best_feasible_sln)) {
-            best_feasible_sln = curr_sln;
+        if (min_feasible_sln_it != feasible_slns.cend() &&
+            objective(prob, *min_feasible_sln_it) <
+                objective(prob, best_feasible_sln)) {
+            best_feasible_sln = *min_feasible_sln_it;
             i = 0;
         }
 

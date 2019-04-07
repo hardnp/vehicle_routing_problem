@@ -71,7 +71,7 @@ void Solution::update_used_vehicles() {
     }
 }
 
-bool Solution::operator==(const Solution& other) {
+bool Solution::operator==(const Solution& other) const {
     if (this->routes.size() != other.routes.size()) {
         return false;
     }
@@ -82,4 +82,6 @@ bool Solution::operator==(const Solution& other) {
     }
     return true;
 }
+
+Solution::operator bool() { return this->routes.empty(); }
 }  // namespace vrp
