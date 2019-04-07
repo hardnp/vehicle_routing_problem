@@ -34,20 +34,19 @@ int total_violated_time(const Problem& prob, const Solution& sln) {
     return violated_time;
 }
 
-bool satisfies_capacity(const Problem& prob, const Solution& sln) {
-    bool satisfies = true;
-    const auto& customers = prob.customers;
+TransportationQuantity total_violated_capacity(const Problem& prob,
+                                               const Solution& sln) {
+    TransportationQuantity violated_capacity = {};
+
+    const auto& vehicles = prob.vehicles;
     for (const auto& vehicle_and_route : sln.routes) {
-        const auto& vehicle = prob.vehicles[vehicle_and_route.first];
+        size_t v = vehicle_and_route.first;
         const auto& route = vehicle_and_route.second;
-        satisfies &= (vehicle.capacity >=
-                      std::accumulate(route.cbegin(), route.cend(),
-                                      TransportationQuantity{},
-                                      [&customers](const auto& init, size_t c) {
-                                          return init + customers[c].demand;
-                                      }));
+        violated_capacity += total_violated_capacity(
+            prob, vehicles[v].capacity, route.cbegin(), route.cend());
     }
-    return satisfies;
+
+    return violated_capacity;
 }
 
 bool satisfies_site_dependency(const Problem& prob, const Solution& sln) {

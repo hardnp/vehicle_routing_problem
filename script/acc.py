@@ -9,8 +9,9 @@ from collections import defaultdict
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__)) + '/../'
-RESULT_PATTERN = re.compile(r'.*SOLUTION:\s*(?P<data>\d+\.\d+\s\|\s\d+).*',
-                            re.DOTALL)
+RESULT_PATTERN = re.compile(
+    r'.*SOLUTION:\s*(?P<data>\d+\.\d+\s\|\s\d+\s\|\s\{.*\}).*',
+    re.DOTALL)
 
 
 def parse_args():

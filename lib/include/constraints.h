@@ -39,12 +39,41 @@ inline int total_violated_time(const Problem& prob, ListIt first, ListIt last) {
     return violated_time;
 }
 
-bool satisfies_capacity(const Problem& prob, const Solution& sln);
+TransportationQuantity total_violated_capacity(const Problem& prob,
+                                               const Solution& sln);
+
+template<typename ListIt>
+TransportationQuantity total_violated_capacity(const Problem& prob,
+                                               TransportationQuantity cap,
+                                               ListIt first, ListIt last) {
+    static_assert(
+        std::is_same<size_t, std::decay_t<typename std::iterator_traits<
+                                 ListIt>::value_type>>::value,
+        "unexpected iterator value type");
+    if (first == last) {
+        throw std::runtime_error("unable to count violated capacity");
+    }
+
+    const auto& customers = prob.customers;
+    for (; first != last; ++first) {
+        cap -= customers[*first].demand;
+    }
+
+    TransportationQuantity violated_capacity = {};
+    if (cap.volume < 0 || cap.weight < 0) {
+        violated_capacity = -1 * cap;
+    }
+    return violated_capacity;
+}
+
+inline bool satisfies_capacity(const Problem& prob, const Solution& sln) {
+    return total_violated_capacity(prob, sln) == 0;
+}
 
 bool satisfies_site_dependency(const Problem& prob, const Solution& sln);
 
 inline bool satisfies_time_windows(const Problem& prob, const Solution& sln) {
-    return 0 == total_violated_time(prob, sln);
+    return total_violated_time(prob, sln) == 0;
 }
 
 bool satisfies_all(const Problem& prob, const Solution& sln);

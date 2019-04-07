@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ostream>
+
 namespace vrp {
 /// Transportation Quantity representation
 class TransportationQuantity {
@@ -77,5 +79,24 @@ public:
         return TransportationQuantity{this->volume + other.volume,
                                       this->weight + other.weight};
     }
+
+    inline TransportationQuantity operator*(int v) const noexcept {
+        return TransportationQuantity{this->volume * v, this->weight * v};
+    }
+
+    inline bool operator==(int v) const noexcept {
+        return this->volume == v && this->weight == v;
+    }
 };
+
+inline TransportationQuantity operator*(int v,
+                                        TransportationQuantity q) noexcept {
+    return q * v;
+}
 }  // namespace vrp
+
+namespace std {
+inline ostream& operator<<(ostream& o, vrp::TransportationQuantity q) {
+    return o << "{" << q.volume << ", " << q.weight << "}";
+}
+}  // namespace std

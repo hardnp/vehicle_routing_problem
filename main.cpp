@@ -6,6 +6,7 @@
 #include "objective.h"
 #include "solution.h"
 #include "threading.h"
+#include "transportation_quantity.h"
 
 #include <algorithm>
 #include <fstream>
@@ -32,8 +33,10 @@ public:
     ~FileHandler() { m_file.close(); }
 };
 
-void print_fmt(double objective, int violated_time) {
-    LOG_DEBUG << " SOLUTION: " << objective << " | " << violated_time << EOL;
+void print_fmt(double objective, int violated_time,
+               vrp::TransportationQuantity violated_q) {
+    LOG_DEBUG << " SOLUTION: " << objective << " | " << violated_time << " | "
+              << violated_q << EOL;
 }
 
 constexpr const size_t INITIAL_SLN_COUNT = 20;
@@ -150,7 +153,8 @@ int main(int argc, char* argv[]) {
                  << EOL;
         LOG_INFO << "Cost func = " << cost_function(problem, best_sln) << EOL;
         print_fmt(objective(problem, best_sln),
-                  vrp::constraints::total_violated_time(problem, best_sln));
+                  vrp::constraints::total_violated_time(problem, best_sln),
+                  vrp::constraints::total_violated_capacity(problem, best_sln));
     }
 
     return 0;
