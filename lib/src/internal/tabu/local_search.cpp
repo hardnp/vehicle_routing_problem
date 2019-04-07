@@ -17,9 +17,8 @@
 namespace vrp {
 namespace tabu {
 namespace {
-
-// TODO: debug why 1 doesn't work properly
-#define ALT_TABU_ENTRIES 0
+// alternative tabu entries: if 1, "forbids" bad moves; if 0, "keeps" good moves
+#define ALT_TABU_ENTRIES 1  // TODO: debug if this works
 
 // true if vehicle can deliver to customer, false otherwise
 inline bool site_dependent(const Problem& prob, size_t vehicle,
@@ -253,7 +252,6 @@ operator[](size_t i) const {
     return m_methods[i];
 }
 
-// TODO: check constraints & tabu lists
 void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
     static double best_ever_value = std::numeric_limits<double>::max();
 
@@ -269,7 +267,6 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
 
     const auto size = m_prob.n_customers();
     for (size_t customer = 1; customer < size; ++customer) {
-        // TODO: handle case when route not found - debug only?
         size_t r_in = 0, c_index = 0;
         std::tie(r_in, c_index) = sln.customer_owners[customer];
         auto& route_in = sln.routes[r_in].second;
@@ -281,7 +278,6 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                 continue;
             }
 
-            // TODO: handle case when route not found - debug only?
             size_t r_out = 0, n_index = 0;
             std::tie(r_out, n_index) = sln.customer_owners[neighbour];
             // do not relocate inside the same route
@@ -362,8 +358,11 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                 // move is good
                 sln.update_customer_owners(m_prob, r_in);
                 sln.update_customer_owners(m_prob, r_out);
+#if ALT_TABU_ENTRIES
+                lists.relocate.emplace(customer, r_in);
+#else
                 lists.relocate.emplace(customer, r_out);
-
+#endif
                 best_ever_value = std::min(best_ever_value, cost_after);
                 break;
             } else {
@@ -426,8 +425,11 @@ void LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                 sln.update_customer_owners(m_prob, r_in);
                 sln.update_customer_owners(m_prob, sln.routes.size() - 1);
                 sln.used_vehicles.emplace(used_vehicle);
+#if ALT_TABU_ENTRIES
                 lists.relocate.emplace(customer, r_in);
-
+#else
+                lists.relocate.emplace(customer, r_out);
+#endif
                 best_ever_value = std::min(best_ever_value, cost_after);
             } else {
                 // move is bad - roll back the changes
@@ -450,7 +452,6 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
 
     const auto size = m_prob.n_customers();
     for (size_t customer = 1; customer < size; ++customer) {
-        // TODO: handle case when route not found - debug only?
         size_t r1 = 0, c_index = 0;
         std::tie(r1, c_index) = sln.customer_owners[customer];
         auto& route1 = sln.routes[r1].second;
@@ -462,7 +463,6 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
                 continue;
             }
 
-            // TODO: handle case when route not found - debug only?
             size_t r2 = 0, n_index = 0;
             std::tie(r2, n_index) = sln.customer_owners[neighbour];
             // do not relocate inside the same route
@@ -522,8 +522,13 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
                 // move is good
                 sln.update_customer_owners(m_prob, r1);
                 sln.update_customer_owners(m_prob, r2);
+#if ALT_TABU_ENTRIES
+                lists.exchange.emplace(customer, r1);
+                lists.exchange.emplace(neighbour, r2);
+#else
                 lists.exchange.emplace(customer, r2);
                 lists.exchange.emplace(neighbour, r1);
+#endif
 
                 best_ever_value = std::min(best_ever_value, cost_after);
                 break;
@@ -535,7 +540,6 @@ void LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
     }
 }
 
-// TODO: check constraints & tabu lists
 void LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
     static double best_ever_value = std::numeric_limits<double>::max();
 
@@ -605,7 +609,6 @@ void LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
 
     const auto size = m_prob.n_customers();
     for (size_t customer = 1; customer < size; ++customer) {
-        // TODO: handle case when route not found - debug only?
         size_t r1 = 0, c_index = 0;
         std::tie(r1, c_index) = sln.customer_owners[customer];
         auto& route1 = sln.routes[r1].second;
@@ -617,7 +620,6 @@ void LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
                 continue;
             }
 
-            // TODO: handle case when route not found - debug only?
             size_t r2 = 0, n_index = 0;
             std::tie(r2, n_index) = sln.customer_owners[neighbour];
             // do not relocate inside the same route
@@ -749,7 +751,6 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
                     continue;
                 }
 
-                // TODO: handle case when route not found - debug only?
                 size_t r_out = 0, n_index = 0;
                 std::tie(r_out, n_index) = sln.customer_owners[neighbour];
                 // do not relocate inside the same route
