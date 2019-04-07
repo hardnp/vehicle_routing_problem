@@ -649,6 +649,11 @@ void LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
                 distance_on_route(m_prob, m_tw_penalty, it1, route1.end()) +
                 distance_on_route(m_prob, m_tw_penalty, it2, route2.end());
 
+            const auto demand1_before =
+                           total_demand(m_prob, route1.cbegin(), route1.cend()),
+                       demand2_before =
+                           total_demand(m_prob, route2.cbegin(), route2.cend());
+
             cross_routes(route1, std::next(it1), route2, std::next(it2));
 
             const auto cost_after =
@@ -669,8 +674,11 @@ void LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
                            m_prob.vehicles[sln.routes[r1].first].capacity,
                        route2_capacity =
                            m_prob.vehicles[sln.routes[r2].first].capacity;
-            impossible_move |= (demand1_after > route1_capacity ||
-                                demand2_after > route2_capacity);
+
+            impossible_move |= (demand1_after > route1_capacity &&
+                                demand1_after > demand1_before);
+            impossible_move |= (demand2_after > route2_capacity &&
+                                demand2_after > demand2_before);
 
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
