@@ -1,8 +1,9 @@
-#include "cluster_first_route_second.h"
+#include "constraints.h"
+#include "logging.h"
 
 #include <algorithm>
 #include <cassert>
-#include <iostream>
+#include <functional>
 #include <list>
 #include <numeric>
 #include <random>
@@ -17,18 +18,6 @@ using namespace std;
 /// Specify that the variable x is unused in the code
 #define UNUSED(x) (void)x
 
-/// INFO stream
-#define LOG_INFO std::cout << "[INFO] "
-
-/// ERROR stream
-#define LOG_ERROR std::cerr << "[ERROR] "
-
-/// End of line, without stream flushing
-#define EOL "\n"
-
-/// End of line, with stream flushing
-#define EOL_FLUSH std::endl
-
 namespace vrp {
 namespace detail {
 
@@ -36,7 +25,7 @@ namespace {
 inline int volume(const TransportationQuantity& q) { return q.volume; }
 inline int weight(const TransportationQuantity& q) { return q.weight; }
 
-template <typename AttribAccessor>
+template<typename AttribAccessor>
 int total(AttribAccessor accessor, const std::vector<Vehicle>& vehicles,
           const std::vector<size_t>& indices) {
     return std::accumulate(indices.cbegin(), indices.cend(), 0,
@@ -409,12 +398,12 @@ std::unordered_map<size_t, std::list<size_t>> group(const Heuristic& h,
     return routes;
 }
 
-template <typename T> using mat_t = std::vector<std::vector<T>>;
+template<typename T> using mat_t = std::vector<std::vector<T>>;
 
-template <typename T, typename ListIt>
+template<typename T, typename ListIt>
 T sum_route_part(const mat_t<T>& mat, ListIt first, ListIt last) {
     T sum = static_cast<T>(0);
-    for (auto first2 = std::next(first, 1); first2 != last; ++first, ++first2) {
+    for (auto first2 = std::next(first); first2 != last; ++first, ++first2) {
         sum += mat[*first][*first2];
     }
     return sum;
@@ -422,9 +411,11 @@ T sum_route_part(const mat_t<T>& mat, ListIt first, ListIt last) {
 
 #define EXPERIMENTAL 1
 
-/// Solve basic (capacitated) VRP (CVRP) with insertion heuristic
+constexpr const double VRP_RANDOMNESS_THRESHOLD = 0.8;
+
+/// Solve basic (capacitated) VRP with insertion heuristic
 std::vector<std::tuple<size_t, size_t, std::list<size_t>>>
-solve_cvrp(const Heuristic& h) {
+solve_vrp(const Heuristic& h, bool random = false) {
     // depot_offset = 1 due to depot at index 0:
     auto typed_customers = group(h, 1);
     const auto& prob = h.prob();
@@ -443,12 +434,21 @@ solve_cvrp(const Heuristic& h) {
         }
     }
 
+    // static std::random_device rd;
+    // static std::mt19937 g(rd());
+    static std::mt19937 g;
+    static std::uniform_real_distribution<> dist(0.0, 1.0);
+
     // Insertion heuristic, variation 2: c1 is not needed (?), c2 is minimized.
     // params of c2:
     static constexpr const double beta_1 = 0.5, beta_2 = 0.5;
     for (auto& type_and_customers : typed_customers) {
         auto t = type_and_customers.first;
         auto unrouted = type_and_customers.second;
+        unrouted.sort([&prob](auto a, auto b) {
+            return prob.customers[a].hard_tw.first <
+                   prob.customers[b].hard_tw.first;
+        });
         // TODO: sort vehicles by some criterion (e.g. capacity/cost efficiency)
         const auto& vehicles = all_types[t].vehicles;
         bool last_vehicle = false;
@@ -471,10 +471,15 @@ solve_cvrp(const Heuristic& h) {
                 for (const auto& c : unrouted) {
                     // skip if capacity is exceeded
                     if (!last_vehicle &&
-                        running_capacity < prob.customers[c].demand)
+                        running_capacity < prob.customers[c].demand) {
                         continue;
+                    }
+                    if (!last_vehicle && random &&
+                        dist(g) > VRP_RANDOMNESS_THRESHOLD) {
+                        continue;
+                    }
                     std::list<double> ratings_c2{};
-                    for (auto i = route.cbegin(), j = std::next(i, 1);
+                    for (auto i = route.cbegin(), j = std::next(i);
                          j != route.cend(); ++i, ++j) {
                         // calculate total route distance with `c` included:
                         // 0->i + (i->c + c->j) + j->0
@@ -519,16 +524,40 @@ solve_cvrp(const Heuristic& h) {
                     continue;
 
                 // find optimal customer and update route
-                auto optimal = *std::min_element(
-                    optimal_c2.cbegin(), optimal_c2.cend(),
-                    [](const opt_data_t& a, const opt_data_t& b) {
-                        return std::get<1>(a) < std::get<1>(b);
-                    });
-                const auto& c = std::get<0>(optimal);
+                optimal_c2.sort([](const opt_data_t& a, const opt_data_t& b) {
+                    return std::get<1>(a) < std::get<1>(b);
+                });
+                auto optimal = optimal_c2.cbegin();
 
+                // handle time window constraints:
+                std::decay_t<decltype(route)> updated_route = route;
+                if (!last_vehicle) {
+                    for (; optimal != optimal_c2.cend(); ++optimal) {
+                        updated_route.insert(std::next(updated_route.cbegin(),
+                                                       std::get<2>(*optimal)),
+                                             std::get<0>(*optimal));
+                        if (constraints::total_violated_time(
+                                prob, updated_route.cbegin(),
+                                updated_route.cend()) == 0) {
+                            break;
+                        }
+                        updated_route = route;
+                    }
+
+                    if (optimal == optimal_c2.cend()) {
+                        continue;
+                    }
+                } else {
+                    updated_route.insert(std::next(updated_route.cbegin(),
+                                                   std::get<2>(*optimal)),
+                                         std::get<0>(*optimal));
+                }
+
+                const auto& c = std::get<0>(*optimal);
                 unrouted.remove(c);
-                route.insert(std::next(route.cbegin(), std::get<2>(optimal)),
-                             c);
+                route = std::move(updated_route);
+                assert(route.size() > 2);
+
                 running_capacity -= prob.customers[c].demand;
                 nothing_to_add = false;
             }
@@ -555,43 +584,10 @@ Solution routes_to_sln(
     std::vector<std::tuple<size_t, size_t, std::list<size_t>>> routes) {
     Solution sln;
     sln.routes.reserve(routes.size());
-    sln.times.reserve(routes.size());
     for (auto& values : routes) {
         sln.routes.emplace_back(std::get<1>(values),
                                 std::move(std::get<2>(values)));
-        sln.times.emplace_back(std::get<1>(values),
-                               std::list<vrp::RoutePointTime>{});
     }
-
-    // TODO: optimize
-    static const auto at = [](const auto& list, size_t i) {
-        if (list.size() <= i) {
-            throw std::out_of_range("index out of list's range");
-        }
-        return *std::next(list.begin(), i);
-    };
-    const auto& customers = prob.customers;
-    for (size_t ri = 0; ri < sln.routes.size(); ++ri) {
-        const auto& route = sln.routes[ri].second;
-        auto& time = sln.times[ri].second;
-        int start_time = 0;
-        for (size_t i = 0; i < route.size() - 1; ++i) {
-            auto c = at(route, i);
-            auto next_c = at(route, i + 1);
-
-            RoutePointTime t;
-            t.arrive = start_time;
-            t.start = std::max(t.arrive, customers[c].hard_tw.first);
-            t.finish = t.start + customers[c].service_time;
-
-            start_time += t.finish + prob.times[c][next_c];
-
-            time.emplace_back(std::move(t));
-        }
-        // last node is a depot
-        time.emplace_back(start_time, start_time, start_time);
-    }
-
     return sln;
 }
 
@@ -603,7 +599,7 @@ select_seeds(const Heuristic& h) {
 
     // the customer on the route with the largest seed weight becomes the seed
     // point of the route
-    auto routes = solve_cvrp(h);
+    auto routes = solve_vrp(h);
     // TODO: in fact, we don't need routes...
     for (auto& vehicle_route : routes) {
         auto& route = std::get<2>(vehicle_route);
@@ -648,10 +644,11 @@ select_seeds(const Heuristic& h) {
 }
 
 std::vector<Solution> construct_solutions(const Heuristic& h, size_t count) {
-    count = 1;  // TODO: add randomness
+    const bool solve_randomly = count > 1;
     std::vector<Solution> solutions(count);
-    for (auto& sln : solutions) {
-        sln = std::move(routes_to_sln(h.prob(), solve_cvrp(h)));
+    for (size_t i = 0, size = solutions.size(); i < size; ++i) {
+        solutions[i] = std::move(
+            routes_to_sln(h.prob(), solve_vrp(h, i && solve_randomly)));
     }
     return solutions;
 }
@@ -661,13 +658,13 @@ std::vector<Solution> cfrs_impl(const Problem& prob, size_t count) {
     Heuristic h(prob);
     h.solve();
 #ifndef NDEBUG
-    LOG_INFO << "Objective = " << h.algo().getObjValue() << EOL;
+    LOG_INFO << "(CPLEX) Objective = " << h.algo().getObjValue() << EOL;
 #endif
     // loop here:
     h.update();
     h.solve();
 #ifndef NDEBUG
-    LOG_INFO << "Objective = " << h.algo().getObjValue() << EOL;
+    LOG_INFO << "(CPLEX) Objective = " << h.algo().getObjValue() << EOL;
 #endif
 
     return construct_solutions(h, count);

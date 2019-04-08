@@ -64,8 +64,9 @@ def write_table_customer(io_stream, customers):
         'id;volume;weight;hard_tw_begin;hard_tw_end;soft_tw_begin;')
     io_stream.write('soft_tw_end;service_time;suitable_vehicles\n')
     for customer in customers:
-        row = customer[:1] + customer[3:4] + customer[3:6] + customer[4:6] \
-            + customer[6:7]
+        hard_tw_end = str(int(customer[6]) + int(customer[5]))
+        row = customer[:1] + customer[3:4] + customer[3:5] + [hard_tw_end] +\
+            customer[4:5] + [hard_tw_end] + customer[6:7]
         check_customer_table_correctness(row)
         io_stream.write(';'.join(row) + '\n')
 
@@ -75,7 +76,7 @@ def write_table_vehicles(io_stream, vnumber, vcapacity):
     io_stream.write('table vehicle\n')
     io_stream.write('id;volume;weight;fixed_cost;variable_cost\n')
     for i in range(0, vnumber):
-        row = [i, vcapacity, vcapacity, 1.0, 1.0]
+        row = [i, vcapacity, vcapacity, 0.0, 1.0]
         row = [str(e) for e in row]
         io_stream.write(';'.join(row) + '\n')
 

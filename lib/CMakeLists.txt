@@ -23,12 +23,23 @@ if (${WITH_CPLEX})  # add IBM CPLEX dependency
     target_compile_definitions(${PROJECT_NAME} PRIVATE NO_CPLEX_IMPL=0)
     target_include_directories(${PROJECT_NAME} PUBLIC
         ${CPLEX_INCLUDE_DIR} ${CPLEX_CONCERT_INCLUDE_DIR})
-    set(LIBS ${CPLEX_LIBRARIES})
+    set(LIBS ${LIBS} ${CPLEX_LIBRARIES})
     if (UNIX)  # TODO: check for OS X
-        set(LIBS ${CPLEX_LIBRARIES} pthread ${CMAKE_DL_LIBS})
+        set(LIBS ${LIBS} ${CPLEX_LIBRARIES} pthread ${CMAKE_DL_LIBS})
     endif()
 else()  # fallback to implementation stub
     target_compile_definitions(${PROJECT_NAME} PRIVATE NO_CPLEX_IMPL=1)
+endif()
+
+if (${WITH_TBB})  # add TBB dependency
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_TBB=1)
+    target_include_directories(${PROJECT_NAME} PUBLIC ${TBB_INCLUDE_DIR})
+    set(LIBS ${LIBS} ${TBB_LIBRARIES})
+    if (UNIX)  # TODO: check for OS X
+        set(LIBS ${LIBS} ${TBB_LIBRARIES} pthread ${CMAKE_DL_LIBS})
+    endif()
+else()  # fallback to implementation stub
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_TBB=0)
 endif()
 
 target_link_libraries(${PROJECT_NAME} ${LIBS})

@@ -15,6 +15,9 @@ from pathlib import Path
 from collections import defaultdict
 
 
+QUANTITY_MULTIPLIER = 2
+
+
 def parse_args():
     """Parse command-line arguments"""
     parser = argparse.ArgumentParser(
@@ -43,8 +46,14 @@ def to_str(values):
 
 
 def parse_time(value):
-    hours, minutes = value.split(':')
-    return 60 * int(hours) + int(minutes)
+    values = value.split(':')
+    if len(values) == 2:
+        hours, minutes = value.split(':')
+        return 60 * int(hours) + int(minutes)
+    if len(values) == 3:
+        hours, minutes, seconds = value.split(':')
+        return 60 * int(hours) + int(minutes) + int(int(seconds) / 60)
+    raise RuntimeError('unrecognized time format')
 
 
 def parse_bool(value):
@@ -66,7 +75,7 @@ def parse_categories(io_stream):
     # format: customer_category truck_type trailer_type
 
     # needed: customer_category truck_type trailer_type
-    table_categories = defaultdict(list)
+    table_categories = defaultdict(set)
     for line in io_stream.readlines():
         line = line.strip()
         if not line:
@@ -75,7 +84,7 @@ def parse_categories(io_stream):
         # TODO: use this somehow...
         c_type = int(values[0])
         v_type = parse_vehicle_category(values[1], values[2])
-        table_categories[c_type].append(v_type)
+        table_categories[c_type].add(v_type)
     return table_categories
 
 
@@ -83,9 +92,9 @@ def parse_customer(io_stream):
     """Parse customer.txt stream"""
     _ = io_stream.readline()  # skip header
 
-    # format: id town-id timezone tw-begin tw-end rush-begin rush-end open close
-    #         type parking reload ignore-rush split freeze-serv hot-serv noref
-    #         class day single-truck access-control hard-tw can-split
+    # format: id tw-begin tw-end rush-begin rush-end open close type parking
+    #         reload ignore-rush split freeze-serv hot-serv noref class day
+    #         single-truck access-control hard-tw can-split
 
     # needed: id open close tw-begin tw-end type(?) reload(?) can-split
     table_customers = {}
@@ -96,10 +105,16 @@ def parse_customer(io_stream):
         values = line.split()
         c_id = int(values[0])
         hard_tw_begin, hard_tw_end = \
-            parse_time(values[7]), parse_time(values[8])
+            parse_time(values[5]), parse_time(values[6])
+        if hard_tw_begin == hard_tw_begin == 0:
+            hard_tw_begin, hard_tw_end = \
+                parse_time('0:00'), parse_time('23:59')
         soft_tw_begin, soft_tw_end = \
-            parse_time(values[3]), parse_time(values[4])
-        c_type = int(values[9])
+            parse_time(values[1]), parse_time(values[2])
+        if soft_tw_begin == soft_tw_end == 0:
+            soft_tw_begin, soft_tw_end = \
+                parse_time('0:00'), parse_time('23:59')
+        c_type = int(values[7])
         c_can_split = parse_bool(values[-1])
         # TODO: where's service time?
         table_customers[c_id] = (hard_tw_begin, hard_tw_end, soft_tw_begin,
@@ -111,6 +126,12 @@ def parse_demand(io_stream):
     """Parse demand.txt stream"""
     _ = io_stream.readline()  # skip header
 
+    def float_sum(l):
+        s = 0.0
+        for e in l:
+            s += float(e.replace(',', '.'))
+        return s
+
     # format: date object-code ref non-ref
 
     # needed: obect-code ref+non-ref
@@ -121,7 +142,7 @@ def parse_demand(io_stream):
             continue
         values = line.split()
         c_id = int(values[1])
-        demand = int(values[2]) + int(values[3])
+        demand = int(QUANTITY_MULTIPLIER * float_sum([values[2], values[3]]))
         table_demand[c_id] = demand
     return table_demand
 
@@ -135,7 +156,8 @@ def parse_distance(io_stream):
             continue
         values = line.split()
         c_from, c_to = int(values[0]), int(values[1])
-        cost, time = float(values[2]), parse_time(values[3])
+        cost, time = float(values[2].replace(',', '.')), parse_time(
+            values[3].replace(',', '.'))
         table_distances.append((c_from, c_to, cost, time))
     return table_distances
 
@@ -157,14 +179,12 @@ def parse_vehicle(io_stream):
             continue
         values = line.split()
         v_id = int(values[0][3:])  # skip "CAR" part
-        v_type1, v_type2 = values[1], values[2]
-        if v_type1 != v_type2:
-            raise RuntimeError("truck type != trailer type")
-        v_type = parse_vehicle_category(v_type1, v_type2)
+        v_type = int(values[1])
         # TODO: is this correct? may be VALUE1,VALUE2 represent volume+weight,
         # not floating value of capacity?
-        capacity = float(values[4].replace(',', '.')) \
-            + float(values[5].replace(',', '.'))
+        capacity = int(QUANTITY_MULTIPLIER *
+                       (float(values[4].replace(',', '.'))
+                        + float(values[5].replace(',', '.'))))
         work_time = sum([float(v.replace(',', '.')) for v in values[6:9]])
         fixed_cost = float(values[9])
         table_vehicle[v_id] = (v_type, capacity, work_time, fixed_cost)
@@ -192,6 +212,13 @@ def parse_real_life_folder(folder):
     return tables
 
 
+def remap_keys(keys):
+    remapped = {}
+    for i, key in enumerate(keys):
+        remapped[key] = i
+    return remapped
+
+
 def write_table_customer(io_stream, tables):
     """Write table customer into provided stream"""
     io_stream.write('table customer\n')
@@ -199,11 +226,11 @@ def write_table_customer(io_stream, tables):
         'id;volume;weight;hard_tw_begin;hard_tw_end;soft_tw_begin;')
     io_stream.write('soft_tw_end;service_time;suitable_vehicles\n')
 
-    depot_subtrahend = min(i for i in tables['customer'].keys())
+    key_map = remap_keys(tables['customer'].keys())
     for key, values in tables['customer'].items():
         demand = tables['demand'].get(key, 0)
         table_entry = []
-        table_entry.append(key - depot_subtrahend)
+        table_entry.append(key_map[key])
         table_entry.append(demand)  # volume
         table_entry.append(demand)  # weight
         table_entry += values[:4]  # time windows
@@ -244,16 +271,15 @@ def write_table_costs(io_stream, tables):
     """Write table costs into provided stream"""
     io_stream.write('table cost\n')
 
-    depot_subtrahend = min(i for i in tables['customer'].keys())
-    def sub(x): return x - depot_subtrahend
+    key_map = remap_keys(tables['customer'].keys())
 
     costs = {}
     n_customers = len(tables['customer'])
     for c_id in tables['customer'].keys():
-        costs[sub(c_id)] = [None] * n_customers
+        costs[key_map[c_id]] = [0.0] * n_customers
 
     for values in tables['distance']:
-        costs[sub(values[0])][sub(values[1])] = float(values[2])
+        costs[key_map[values[0]]][key_map[values[1]]] = float(values[2])
 
     for key in sorted(costs):
         row = ['{val}'.format(val=round(e, 5)) for e in costs[key]]
@@ -264,16 +290,15 @@ def write_table_times(io_stream, tables):
     """Write table times into provided stream"""
     io_stream.write('table time\n')
 
-    depot_subtrahend = min(i for i in tables['customer'].keys())
-    def sub(x): return x - depot_subtrahend
+    key_map = remap_keys(tables['customer'].keys())
 
     times = {}
     n_customers = len(tables['customer'])
     for c_id in tables['customer'].keys():
-        times[sub(c_id)] = [None] * n_customers
+        times[key_map[c_id]] = [0] * n_customers
 
     for values in tables['distance']:
-        times[sub(values[0])][sub(values[1])] = int(values[3])
+        times[key_map[values[0]]][key_map[values[1]]] = int(values[3])
 
     for key in sorted(times):
         io_stream.write(';'.join(to_str(times[key])) + '\n')

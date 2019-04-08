@@ -8,14 +8,14 @@
 
 namespace {
 /// Constructs "expected vs actual" string
-template <typename T>
+template<typename T>
 std::string expected_vs_actual(const T& expected, const T& actual) {
     std::stringstream ss;
     ss << "(expected) " << expected << " vs " << actual << " (actual)";
     return ss.str();
 }
 
-template <typename T> std::string table(T name) {
+template<typename T> std::string table(T name) {
     return std::string("table ") + std::string(name);
 }
 

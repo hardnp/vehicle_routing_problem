@@ -33,7 +33,7 @@ private:
                                                      /// true means allowed,
                                                      /// false otherwise
 
-    template <typename IntegerT>
+    template<typename IntegerT>
     std::vector<size_t> to_vector(const std::list<IntegerT>& l) {
         std::vector<size_t> v;
         v.reserve(l.size());
@@ -117,6 +117,8 @@ public:
     int max_violated_soft_tw =
         std::numeric_limits<int>::max();  ///< max number of violated
                                           /// soft time windows
+    // TODO: add to CSV
+    double time_coeff = 0.0;  ///< time scale coefficient for objective
 
     // TODO: should be part of ctor
     void set_up() {
@@ -137,7 +139,6 @@ public:
             }
         }
 
-        // TODO: get rid of this:
         // set allowed vehicles
         m_allowed_vehicles.resize(customers_size, {});
         for (size_t c = 0; c < customers_size; ++c) {
@@ -167,6 +168,10 @@ public:
     /// Get allowed vehicles for customer. Expected `customer` param is 0-based
     inline const std::vector<bool>& allowed_vehicles(size_t customer) const {
         return m_allowed_vehicles[customer];
+    }
+    /// Get allowed vehicles for customer. Expected `customer` param is 0-based
+    inline size_t allowed_vehicles_size() const {
+        return m_allowed_vehicles.size();
     }
     /// Get allowed types for customer. Expected `customer` param is 0-based
     inline const std::vector<bool>& allowed_types(size_t customer) const {

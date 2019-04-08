@@ -1,4 +1,5 @@
 #include "csv_parser.h"
+#include "objective.h"
 #include "src/internal/subparsers.h"
 
 #include <algorithm>
@@ -110,6 +111,7 @@ Problem CsvParser::read(std::istream& in) const {
                                1, this->m_delimiter)
             .get();
     problem.set_up();
+
     return problem;
 }
 
