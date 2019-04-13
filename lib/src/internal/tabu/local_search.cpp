@@ -347,6 +347,11 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                 m_prob.vehicles[sln.routes[r_out].first].capacity;
             impossible_move |= (out_demand_after > out_capacity);
 
+            impossible_move |=
+                (m_can_violate_tw &&
+                 (constraints::total_violated_time(m_prob, route_out.cbegin(),
+                                                   route_out.cend()) != 0));
+
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
                 // move is good
@@ -549,6 +554,14 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
                                 demand1_after > demand1_before);
             impossible_move |= (demand2_after > route2_capacity &&
                                 demand2_after > demand2_before);
+
+            impossible_move |=
+                (m_can_violate_tw &&
+                 (constraints::total_violated_time(m_prob, route1.cbegin(),
+                                                   route1.cend()) != 0 ||
+                  constraints::total_violated_time(m_prob, route2.cbegin(),
+                                                   route2.cend()) != 0));
+
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
                 // move is good
@@ -610,13 +623,18 @@ bool LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
                         paired_distance_on_route(m_prob, m_tw_penalty, i, k);
 
                     // aspiration
-                    const bool impossible_move = (lists.two_opt.has(*i, *k) ||
-                                                  lists.pr_two_opt.has(*i) ||
-                                                  lists.pr_two_opt.has(*k)) &&
-                                                 cost_after >= best_ever_value;
+                    bool impossible_move = (lists.two_opt.has(*i, *k) ||
+                                            lists.pr_two_opt.has(*i) ||
+                                            lists.pr_two_opt.has(*k)) &&
+                                           cost_after >= best_ever_value;
+
+                    impossible_move |=
+                        (m_can_violate_tw &&
+                         (constraints::total_violated_time(
+                              m_prob, route.cbegin(), route.cend()) != 0));
 
                     // decide whether move is good
-                    if (impossible_move && cost_after < cost_before) {
+                    if (!impossible_move && cost_after < cost_before) {
                         // move is good
                         found_new_best = true;
                         // forbid previously existing edges
@@ -730,6 +748,13 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
                                 demand1_after > demand1_before);
             impossible_move |= (demand2_after > route2_capacity &&
                                 demand2_after > demand2_before);
+
+            impossible_move |=
+                (m_can_violate_tw &&
+                 (constraints::total_violated_time(m_prob, route1.cbegin(),
+                                                   route1.cend()) != 0 ||
+                  constraints::total_violated_time(m_prob, route2.cbegin(),
+                                                   route2.cend()) != 0));
 
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
@@ -877,7 +902,13 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
 
                 const auto out_capacity =
                     m_prob.vehicles[sln.routes[r_out].first].capacity;
-                const bool impossible_move = (out_demand_after > out_capacity);
+                bool impossible_move = (out_demand_after > out_capacity);
+                impossible_move |=
+                    (m_can_violate_tw &&
+                     (constraints::total_violated_time(
+                          m_prob, route_in.cbegin(), route_in.cend()) != 0 ||
+                      constraints::total_violated_time(
+                          m_prob, route_out.cbegin(), route_out.cend()) != 0));
 
                 // decide whether move is good
                 if (!impossible_move && cost_after < cost_before) {
@@ -922,8 +953,13 @@ void LocalSearchMethods::intra_relocate(Solution& sln) {
                 const auto cost_after = distance_on_route(
                     m_prob, m_tw_penalty, route.begin(), route.end());
 
+                const bool impossible_move =
+                    (m_can_violate_tw &&
+                     (constraints::total_violated_time(m_prob, route.cbegin(),
+                                                       route.cend()) != 0));
+
                 // decide whether move is good
-                if (cost_after >= cost_before) {
+                if (!impossible_move && cost_after >= cost_before) {
                     // move is bad - roll back the changes
                     std::swap(*pos, *new_pos);
                 }
@@ -934,5 +970,6 @@ void LocalSearchMethods::intra_relocate(Solution& sln) {
 }
 
 void LocalSearchMethods::penalize_tw(double value) { m_tw_penalty = value; }
+void LocalSearchMethods::violate_tw(bool value) { m_can_violate_tw = value; }
 }  // namespace tabu
 }  // namespace vrp

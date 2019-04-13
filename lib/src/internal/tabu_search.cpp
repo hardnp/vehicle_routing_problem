@@ -28,6 +28,8 @@ constexpr const double TIME_WINDOWS_PENALTY_BASE = 1.2;
 
 constexpr const uint32_t CONSTRAINTS_FIX_ITERS = 0.1 * TABU_SEARCH_ITERS;
 
+constexpr const uint32_t MAX_VIOLATION_ITERS = 3;
+
 void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
                        size_t i) {
     switch (i) {
