@@ -69,6 +69,15 @@ public:
         return {this->volume + other.volume, this->weight + other.weight};
     }
 
+    inline TransportationQuantity
+    operator+(int other) const noexcept {
+        return {this->volume + other, this->weight + other};
+    }
+
+    inline TransportationQuantity operator+(int other) noexcept {
+        return {this->volume + other, this->weight + other};
+    }
+
     inline explicit operator bool() const noexcept {
         // true if both volume and weight != 0, false otherwise
         return this->volume != 0 && this->weight != 0;

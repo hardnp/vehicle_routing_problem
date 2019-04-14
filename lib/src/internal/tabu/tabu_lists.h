@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <unordered_set>
 #include <utility>
+#include <iterator>
 
 // can be overriden from the outside
 #ifndef TABU_TENURE
