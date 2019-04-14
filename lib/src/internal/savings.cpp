@@ -7,10 +7,6 @@
 #include <numeric>
 #include <tuple>
 
-// FIXME: delete this
-/*#include "constraints.h"
-#include "objective.h"*/
-
 // some regularisation
 #define MAX_WAITING_TIME 1000
 #define MAX_TIME_VIOLATION 0
@@ -94,8 +90,7 @@ std::vector<Solution> savings(const Problem &prob, size_t count) {
       times[prob.customers[i].id] = {
           prob.customers[i].hard_tw.first, prob.customers[i].hard_tw.second,
           std::max(prob.customers[i].hard_tw.first,
-                   prob.times[0][prob.customers[i].id]) +
-              prob.customers[i].service_time,
+                   prob.times[0][prob.customers[i].id]),
           prob.customers[i].service_time};
     }
 
@@ -194,23 +189,35 @@ std::vector<Solution> savings(const Problem &prob, size_t count) {
             bool tw_violation = 0;
 
             int offset = times[best_save.i].current +
+                         times[best_save.i].service_time +
                          prob.times[best_save.i][best_save.j] -
                          times[best_save.j].current;
 
             // do NOT remove the &
             auto &current_customers = std::get<1>(current_route);
 
+            auto prev = best_save.i;
+            auto curr = best_save.j;
+            int curr_time = times[best_save.i].current +
+                            times[best_save.i].service_time +
+                            prob.times[best_save.i][best_save.j];
             for (int s = 1; s < current_customers.size() - 1; ++s) {
-              if (times[current_customers[s]].current + offset +
-                      times[current_customers[s]].service_time * 2 >
-                  times[current_customers[s]].finish + MAX_TIME_VIOLATION) {
+              if (curr_time + times[curr].service_time >
+                  times[curr].finish + MAX_TIME_VIOLATION) {
                 tw_violation = 1;
                 break;
               }
+              prev = curr;
+              curr = current_customers[s + 1];
+              curr_time = std::max(curr_time + times[prev].service_time +
+                                       prob.times[prev][curr],
+                                   times[curr].start);
             }
 
             if (times[current_customers[current_customers.size() - 2]].current +
-                    times[best_save.j].service_time + offset +
+                    times[current_customers[current_customers.size() - 2]]
+                        .service_time +
+                    offset +
                     prob.times[current_customers[current_customers.size() - 2]]
                               [0] >
                 times[0].finish + MAX_TIME_VIOLATION) {
@@ -233,15 +240,22 @@ std::vector<Solution> savings(const Problem &prob, size_t count) {
               std::get<2>(current_route) = tmp_cap;
               std::get<0>(current_route) = common_veh;
 
+              auto prev = best_save.i;
+              auto curr = best_save.j;
+              int curr_time = times[best_save.i].current +
+                              times[best_save.i].service_time +
+                              prob.times[best_save.i][best_save.j];
               for (int c = 1; c < current_customers.size() - 1; ++c) {
-                times[current_customers[c]].current =
-                    std::max(times[current_customers[c]].current + offset +
-                                 times[best_save.j].service_time,
-                             times[current_customers[c]].current);
+                times[curr].current = std::max(curr_time, times[curr].current);
+                prev = curr;
+                curr = current_customers[c + 1];
+                curr_time = std::max(curr_time + times[prev].service_time +
+                                         prob.times[prev][curr],
+                                     times[curr].start);
               }
             }
 
-            // add to the end
+            // add to the end (0 -> current route -> j -> 0)
           } else if (best_save.i ==
                          std::get<1>(
                              current_route)[std::get<1>(current_route).size() -
@@ -283,11 +297,12 @@ std::vector<Solution> savings(const Problem &prob, size_t count) {
             bool tw_violation = 0;
 
             int offset = times[best_save.i].current +
+                         times[best_save.i].service_time +
                          prob.times[best_save.i][best_save.j] -
                          times[best_save.j].current;
 
             if (times[best_save.j].current + offset +
-                    times[best_save.j].service_time * 2 >
+                    times[best_save.j].service_time >
                 times[best_save.j].finish + MAX_TIME_VIOLATION) {
               tw_violation = 1;
             }
@@ -306,7 +321,7 @@ std::vector<Solution> savings(const Problem &prob, size_t count) {
             }
 
             if (!tw_violation && !site_dep_viol && !cap_viol) {
-              // adding to the begin
+              // adding to the end
               ++served;
               dest[best_save.j] = 1;
               std::get<1>(current_route)
@@ -314,8 +329,7 @@ std::vector<Solution> savings(const Problem &prob, size_t count) {
               std::get<2>(current_route) = tmp_cap;
               std::get<0>(current_route) = common_veh;
               times[best_save.j].current =
-                  std::max(times[best_save.j].current + offset +
-                               times[best_save.j].service_time,
+                  std::max(times[best_save.j].current + offset,
                            times[best_save.j].current);
             }
           }
@@ -331,20 +345,7 @@ std::vector<Solution> savings(const Problem &prob, size_t count) {
       }
     }
 
-    // FIXME: delete this
-    // std::cout << std::endl << "final routes" << std::endl;
-    /*for (auto a : routes) {
-      // std::cout << "vehicle " << a.first << std::endl;
-      for (auto b : a.second) {
-        std::cout << b << "   "
-            //<< times[b].start << ' ' << times[b].current << ' ' <<
-            // times[b].finish << std::endl
-            ;
-      }
-      std::cout << std::endl;
-    }*/
-
-    Solution mine;
+    Solution sav_sol;
     std::vector<std::pair<size_t, std::list<size_t>>> listed_routes(
         routes.size());
     int ii = 0;
@@ -355,29 +356,14 @@ std::vector<Solution> savings(const Problem &prob, size_t count) {
       }
       ++ii;
     }
-    mine.routes = listed_routes;
+    sav_sol.routes = listed_routes;
 
-    // seems legit
-    mine.update_customer_owners(prob);
-    mine.update_times(prob);
-    mine.update_used_vehicles();
-    // FIXME: delete this
-    /*std::cout << "CONSTRAINTS" << std::endl;
-    std::cout << "is ok " << vrp::constraints::satisfies_all(prob, mine)
-              << std::endl;
+    // update solution info
+    sav_sol.update_customer_owners(prob);
+    sav_sol.update_times(prob);
+    sav_sol.update_used_vehicles();
 
-    std::cout << "total time viol "
-              << vrp::constraints::total_violated_time(prob, mine) << std::endl;
-    std::cout << "total cap viol "
-              << vrp::constraints::total_violated_capacity(prob, mine)
-              << std::endl;
-    std::cout << "site dep is ok "
-              << vrp::constraints::satisfies_site_dependency(prob, mine)
-              << std::endl;
-
-    std::cout << "OBJECTIVE " << objective(prob, mine) << std::endl;
-    std::cout << "COST " << cost_function(prob, mine) << std::endl;*/
-    solutions.push_back(mine);
+    solutions.push_back(sav_sol);
   }
 
   return solutions;
