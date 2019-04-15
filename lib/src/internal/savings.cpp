@@ -11,16 +11,16 @@
 #define MAX_WAITING_TIME 1000
 #define MAX_TIME_VIOLATION 0
 #define MAX_CAPACITY_VIOLATION 0
-#define FIRST_RAND_ROUTES 100
+#define FIRST_RAND_ROUTES 10
 
 namespace vrp {
 namespace detail {
 
 std::vector<Solution> savings(const Problem &prob, size_t count) {
   std::vector<Solution> solutions;
-  std::srand(time(0));
+  std::srand((unsigned int)time(0));
 
-  for (int it = 0; it < count; ++it) {
+  for (size_t it = 0; it < count; ++it) {
     const auto cust_size = prob.customers.size() - 1;
     const auto points = cust_size + 1; // + 1 for depo itself
 
@@ -86,7 +86,7 @@ std::vector<Solution> savings(const Problem &prob, size_t count) {
     std::map<size_t, Time> times;
 
     // initial times
-    for (auto i = 0; i < points; ++i) {
+    for (size_t i = 0; i < points; ++i) {
       times[prob.customers[i].id] = {
           prob.customers[i].hard_tw.first, prob.customers[i].hard_tw.second,
           std::max(prob.customers[i].hard_tw.first,
@@ -104,7 +104,7 @@ std::vector<Solution> savings(const Problem &prob, size_t count) {
                      prob.customers[rand_cust].demand};
 
     // number of visited customers
-    int served = 1;
+    size_t served = 1;
     dest[rand_cust] = 1;
     bool pick_new_route = 0;
     int first_rand_routes = 1;
@@ -142,11 +142,21 @@ std::vector<Solution> savings(const Problem &prob, size_t count) {
             }
           }
         }
+
+        // workaround if the last customer is served randomly
+        if (served == cust_size) {
+          std::pair<size_t, std::vector<size_t>> route_to_add;
+          route_to_add.first = std::get<0>(current_route)[0];
+          used_veh[route_to_add.first] = 1;
+          route_to_add.second = std::get<1>(current_route);
+          routes.push_back(route_to_add);
+        }
+
         continue;
 
       } else {
 
-        for (int i = 0; i < save.size(); ++i) {
+        for (size_t i = 0; i < save.size(); ++i) {
           auto best_save = save[i];
 
           // add to the begin (0 -> i -> current route -> 0)
@@ -201,7 +211,7 @@ std::vector<Solution> savings(const Problem &prob, size_t count) {
             int curr_time = times[best_save.i].current +
                             times[best_save.i].service_time +
                             prob.times[best_save.i][best_save.j];
-            for (int s = 1; s < current_customers.size() - 1; ++s) {
+            for (size_t s = 1; s < current_customers.size() - 1; ++s) {
               if (curr_time + times[curr].service_time >
                   times[curr].finish + MAX_TIME_VIOLATION) {
                 tw_violation = 1;
@@ -245,7 +255,7 @@ std::vector<Solution> savings(const Problem &prob, size_t count) {
               int curr_time = times[best_save.i].current +
                               times[best_save.i].service_time +
                               prob.times[best_save.i][best_save.j];
-              for (int c = 1; c < current_customers.size() - 1; ++c) {
+              for (size_t c = 1; c < current_customers.size() - 1; ++c) {
                 times[curr].current = std::max(curr_time, times[curr].current);
                 prev = curr;
                 curr = current_customers[c + 1];

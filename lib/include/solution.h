@@ -36,6 +36,8 @@ public:
 
     void update_used_vehicles();
 
+    void reset_times();
+
     bool operator==(const Solution& other) const;
 
     explicit operator bool();
