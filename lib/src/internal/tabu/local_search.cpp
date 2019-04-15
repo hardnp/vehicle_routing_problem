@@ -154,29 +154,39 @@ void delete_loops_after_relocate(Solution& sln, TabuLists& lists) {
         }
     }
 
-    auto& relocate_list = lists.relocate.all();
-    while (!loop_indices.empty()) {
-        auto loop = loop_indices.top();
+    auto delete_loops_in_tabu_list = [&loop_indices](const Solution& sln,
+                                                     auto& relocate_list) {
+        auto loop_indices_copy = loop_indices;
+        while (!loop_indices_copy.empty()) {
+            auto loop = loop_indices_copy.top();
 
-        size_t ri = std::distance(sln.routes.cbegin(), loop);
-        std::decay_t<decltype(relocate_list)> fixed_relocate_list = {};
-        while (!relocate_list.empty()) {
-            auto entry = *relocate_list.begin();
-            relocate_list.erase(relocate_list.begin());
-            if (entry.value.second == ri) {
-                continue;
-            }
-            for (size_t i = ri + 1, size = sln.routes.size(); i < size; ++i) {
-                if (entry.value.second == i) {
-                    entry.value.second--;
-                    break;
+            size_t ri = std::distance(sln.routes.cbegin(), loop);
+            std::decay_t<decltype(relocate_list)> fixed_relocate_list = {};
+            while (!relocate_list.empty()) {
+                auto entry = *relocate_list.begin();
+                relocate_list.erase(relocate_list.begin());
+                if (entry.value.second == ri) {
+                    continue;
                 }
+                for (size_t i = ri + 1, size = sln.routes.size(); i < size;
+                     ++i) {
+                    if (entry.value.second == i) {
+                        entry.value.second--;
+                        break;
+                    }
+                }
+                fixed_relocate_list.emplace(entry);
             }
-            fixed_relocate_list.emplace(entry);
+            relocate_list = std::move(fixed_relocate_list);
+            loop_indices_copy.pop();
         }
-        relocate_list = std::move(fixed_relocate_list);
+    };
 
-        sln.routes.erase(loop);
+    delete_loops_in_tabu_list(sln, lists.relocate.all());
+    delete_loops_in_tabu_list(sln, lists.relocate_new_route.all());
+
+    while (!loop_indices.empty()) {
+        sln.routes.erase(loop_indices.top());
         loop_indices.pop();
     }
 }
@@ -448,7 +458,8 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists) {
                               std::next(it_out, 2));
 
         const bool impossible_move =
-            lists.pr_relocate.has(customer) && cost_after >= best_ever_value;
+            lists.pr_relocate_new_route.has(customer) &&
+            cost_after >= best_ever_value;
 
         // decide whether move is good
         if (!impossible_move && cost_after < cost_before) {
@@ -457,10 +468,10 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists) {
             sln.update_customer_owners(m_prob, sln.routes.size() - 1);
             sln.used_vehicles.emplace(used_vehicle);
 #if ALT_TABU_ENTRIES
-            lists.relocate.emplace(customer, r_in);
+            lists.relocate_new_route.emplace(customer, r_in);
 #endif
 #if USE_PRESERVE_ENTRIES
-            lists.pr_relocate.emplace(customer);
+            lists.pr_relocate_new_route.emplace(customer);
 #endif
             improved = true;
             best_ever_value = cost_after;

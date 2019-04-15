@@ -36,8 +36,10 @@ void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
                        size_t i) {
     switch (i) {
     case 0:
-        lists.relocate = std::move(new_lists.relocate);
-        lists.pr_relocate = std::move(new_lists.pr_relocate);
+        lists.relocate = new_lists.relocate;
+        lists.pr_relocate = new_lists.pr_relocate;
+        lists.relocate_new_route = std::move(new_lists.relocate);
+        lists.pr_relocate_new_route = std::move(new_lists.pr_relocate);
         break;
     case 1:
         lists.exchange = std::move(new_lists.exchange);
@@ -52,8 +54,10 @@ void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
         lists.pr_cross = std::move(new_lists.pr_cross);
         break;
     case 4:
-        lists.relocate = std::move(new_lists.relocate);
-        lists.pr_relocate = std::move(new_lists.pr_relocate);
+        lists.relocate_new_route = new_lists.relocate_new_route;
+        lists.pr_relocate_new_route = new_lists.pr_relocate_new_route;
+        lists.relocate = std::move(new_lists.relocate_new_route);
+        lists.pr_relocate = std::move(new_lists.pr_relocate_new_route);
         break;
     case 5:
         lists.relocate_split = std::move(new_lists.relocate_split);
