@@ -348,7 +348,7 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
             impossible_move |= (out_demand_after > out_capacity);
 
             impossible_move |=
-                (m_can_violate_tw &&
+                (!m_can_violate_tw &&
                  (constraints::total_violated_time(m_prob, route_out.cbegin(),
                                                    route_out.cend()) != 0));
 
@@ -556,7 +556,7 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
                                 demand2_after > demand2_before);
 
             impossible_move |=
-                (m_can_violate_tw &&
+                (!m_can_violate_tw &&
                  (constraints::total_violated_time(m_prob, route1.cbegin(),
                                                    route1.cend()) != 0 ||
                   constraints::total_violated_time(m_prob, route2.cbegin(),
@@ -629,7 +629,7 @@ bool LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
                                            cost_after >= best_ever_value;
 
                     impossible_move |=
-                        (m_can_violate_tw &&
+                        (!m_can_violate_tw &&
                          (constraints::total_violated_time(
                               m_prob, route.cbegin(), route.cend()) != 0));
 
@@ -750,7 +750,7 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
                                 demand2_after > demand2_before);
 
             impossible_move |=
-                (m_can_violate_tw &&
+                (!m_can_violate_tw &&
                  (constraints::total_violated_time(m_prob, route1.cbegin(),
                                                    route1.cend()) != 0 ||
                   constraints::total_violated_time(m_prob, route2.cbegin(),
@@ -904,7 +904,7 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
                     m_prob.vehicles[sln.routes[r_out].first].capacity;
                 bool impossible_move = (out_demand_after > out_capacity);
                 impossible_move |=
-                    (m_can_violate_tw &&
+                    (!m_can_violate_tw &&
                      (constraints::total_violated_time(
                           m_prob, route_in.cbegin(), route_in.cend()) != 0 ||
                       constraints::total_violated_time(
@@ -954,7 +954,7 @@ void LocalSearchMethods::intra_relocate(Solution& sln) {
                     m_prob, m_tw_penalty, route.begin(), route.end());
 
                 const bool impossible_move =
-                    (m_can_violate_tw &&
+                    (!m_can_violate_tw &&
                      (constraints::total_violated_time(m_prob, route.cbegin(),
                                                        route.cend()) != 0));
 
