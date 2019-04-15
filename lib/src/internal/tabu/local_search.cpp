@@ -22,6 +22,8 @@ namespace {
 
 #define USE_PRESERVE_ENTRIES 1
 
+#define SORT_HEURISTIC_OPERANDS 0
+
 // true if vehicle can deliver to customer, false otherwise
 inline bool site_dependent(const Problem& prob, size_t vehicle,
                            size_t customer) {
@@ -268,15 +270,34 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
 
     bool improved = false;
 
-    const auto size = m_prob.n_customers();
-    for (size_t customer = 1; customer < size; ++customer) {
+    // reminder: skip depot!
+    const auto& customers = m_prob.customers;
+    std::vector<size_t> ascending_sort_customers(customers.size() - 1);
+    std::iota(ascending_sort_customers.begin(), ascending_sort_customers.end(),
+              1);
+    std::vector<size_t> descending_sort_customers(
+        ascending_sort_customers.begin(), ascending_sort_customers.end());
+
+#if SORT_HEURISTIC_OPERANDS
+    std::sort(ascending_sort_customers.begin(), ascending_sort_customers.end(),
+              [&customers](size_t a, size_t b) {
+                  return customers[a].demand < customers[b].demand;
+              });
+
+    descending_sort_customers = std::move(std::vector<size_t>(
+        ascending_sort_customers.rbegin(), ascending_sort_customers.rend()));
+#endif
+
+    // sorting customers: try to relocate small customers close to big ones.
+    // small ones are usually "outliers", big ones are "cluster centers"
+    for (size_t customer : ascending_sort_customers) {
         size_t r_in = 0, c_index = 0;
         std::tie(r_in, c_index) = sln.customer_owners[customer];
         auto& route_in = sln.routes[r_in].second;
         if (is_loop(route_in)) {
             continue;
         }
-        for (size_t neighbour = 1; neighbour < size; ++neighbour) {
+        for (size_t neighbour : descending_sort_customers) {
             if (customer == neighbour) {
                 continue;
             }
@@ -412,8 +433,22 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists) {
 
     bool improved = false;
 
-    const auto size = m_prob.n_customers();
-    for (size_t customer = 1; customer < size; ++customer) {
+    // reminder: skip depot!
+    const auto& customers = m_prob.customers;
+    std::vector<size_t> descending_sort_customers(customers.size() - 1);
+    std::iota(descending_sort_customers.begin(),
+              descending_sort_customers.end(), 1);
+
+#if SORT_HEURISTIC_OPERANDS
+    std::sort(descending_sort_customers.begin(),
+              descending_sort_customers.end(),
+              [&customers](size_t a, size_t b) {
+                  return customers[a].demand > customers[b].demand;
+              });
+#endif
+
+    // sorting customers: try to relocate big customers to new routes first
+    for (size_t customer : descending_sort_customers) {
         size_t r_in = 0, c_index = 0;
         std::tie(r_in, c_index) = sln.customer_owners[customer];
         if (is_loop(sln.routes[r_in].second)) {
@@ -496,15 +531,28 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
 
     bool improved = false;
 
-    const auto size = m_prob.n_customers();
-    for (size_t customer = 1; customer < size; ++customer) {
+    // reminder: skip depot!
+    const auto& customers = m_prob.customers;
+    std::vector<size_t> ascending_sort_customers(customers.size() - 1);
+    std::iota(ascending_sort_customers.begin(), ascending_sort_customers.end(),
+              1);
+
+#if SORT_HEURISTIC_OPERANDS
+    std::sort(ascending_sort_customers.begin(), ascending_sort_customers.end(),
+              [&customers](size_t a, size_t b) {
+                  return customers[a].demand < customers[b].demand;
+              });
+#endif
+
+    // sorting customers: try to exchange equal size customers first
+    for (size_t customer : ascending_sort_customers) {
         size_t r1 = 0, c_index = 0;
         std::tie(r1, c_index) = sln.customer_owners[customer];
         auto& route1 = sln.routes[r1].second;
         if (is_loop(route1)) {
             continue;
         }
-        for (size_t neighbour = 1; neighbour < size; ++neighbour) {
+        for (size_t neighbour : ascending_sort_customers) {
             if (customer == neighbour) {
                 continue;
             }
