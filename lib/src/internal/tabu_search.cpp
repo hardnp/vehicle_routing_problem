@@ -151,7 +151,7 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     for (uint32_t i = 0, ci = 0; i < TABU_SEARCH_ITERS && ci < MAX_ITERS;
          ++i, ++ci) {
 
-        if (ci == 0 || constraints_count < CONSTRAINTS_FIX_ITERS * 0.2) {
+        if (ci == 0 || constraints_count < CONSTRAINTS_FIX_ITERS * 0.9) {
             ls.penalize_tw(
                 std::pow(TIME_WINDOWS_PENALTY_BASE, tw_violation_count));
         }
