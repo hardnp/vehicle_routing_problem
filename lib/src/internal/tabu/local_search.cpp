@@ -17,9 +17,6 @@
 namespace vrp {
 namespace tabu {
 namespace {
-// alternative tabu entries: if 1, "forbids" bad moves; if 0, "keeps" good moves
-#define ALT_TABU_ENTRIES 1  // TODO: debug if this works
-
 #define USE_PRESERVE_ENTRIES 1
 
 #define SORT_HEURISTIC_OPERANDS 0
@@ -388,11 +385,7 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                 // move is good
                 sln.update_customer_owners(m_prob, r_in);
                 sln.update_customer_owners(m_prob, r_out);
-#if ALT_TABU_ENTRIES
                 lists.relocate.emplace(customer, r_in);
-#else
-                lists.relocate.emplace(customer, r_out);
-#endif
 #if USE_PRESERVE_ENTRIES
                 lists.pr_relocate.emplace(customer);
 #endif
@@ -502,9 +495,7 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists) {
             sln.update_customer_owners(m_prob, r_in);
             sln.update_customer_owners(m_prob, sln.routes.size() - 1);
             sln.used_vehicles.emplace(used_vehicle);
-#if ALT_TABU_ENTRIES
             lists.relocate_new_route.emplace(customer, r_in);
-#endif
 #if USE_PRESERVE_ENTRIES
             lists.pr_relocate_new_route.emplace(customer);
 #endif
@@ -626,13 +617,8 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
                 // move is good
                 sln.update_customer_owners(m_prob, r1);
                 sln.update_customer_owners(m_prob, r2);
-#if ALT_TABU_ENTRIES
                 lists.exchange.emplace(customer, r1);
                 lists.exchange.emplace(neighbour, r2);
-#else
-                lists.exchange.emplace(customer, r2);
-                lists.exchange.emplace(neighbour, r1);
-#endif
 #if USE_PRESERVE_ENTRIES
                 lists.pr_exchange.emplace(customer);
                 lists.pr_exchange.emplace(neighbour);
@@ -668,9 +654,7 @@ bool LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
                     break;
                 // skip depots && start from i + 1
                 for (auto k = std::next(i); k != std::prev(route.end()); ++k) {
-#if ALT_TABU_ENTRIES
                     size_t ic_next = *std::next(i), kc_next = *std::next(k);
-#endif
 
                     // cost before: (i-1)->i->(i+1) + (k-1)->k->(k+1)
                     const auto cost_before =
@@ -697,13 +681,8 @@ bool LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
                         // move is good
                         found_new_best = true;
                         // forbid previously existing edges
-#if ALT_TABU_ENTRIES
                         lists.two_opt.emplace(*i, ic_next);
                         lists.two_opt.emplace(*k, kc_next);
-#else
-                        lists.two_opt.emplace(*i, *std::next(i));
-                        lists.two_opt.emplace(*k, *std::next(k));
-#endif
 #if USE_PRESERVE_ENTRIES
                         lists.pr_two_opt.emplace(*i);
                         lists.pr_two_opt.emplace(*k);
@@ -767,9 +746,7 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
 
             // perform exchange (just swap customer indices)
             auto it1 = atit(route1, c_index), it2 = atit(route2, n_index);
-#if ALT_TABU_ENTRIES
             size_t c_next1 = *std::next(it1), c_next2 = *std::next(it2);
-#endif
 
             const auto cost_before =
                 distance_on_route(m_prob, m_tw_penalty, it1, route1.end()) +
@@ -820,13 +797,8 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
                 // move is good
                 sln.update_customer_owners(m_prob, r1);
                 sln.update_customer_owners(m_prob, r2);
-#if ALT_TABU_ENTRIES
                 lists.cross.emplace(*it1, c_next1);
                 lists.cross.emplace(*it2, c_next2);
-#else
-                lists.cross.emplace(*it1, *std::next(it1));
-                lists.cross.emplace(*it2, *std::next(it2));
-#endif
 #if USE_PRESERVE_ENTRIES
                 lists.pr_cross.emplace(*it1);
                 lists.pr_cross.emplace(*it2);
