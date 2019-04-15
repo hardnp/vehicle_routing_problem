@@ -180,12 +180,6 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
         auto updated_lists = lists;
         do_local_search(ls, slns, updated_lists, was_improved);
 
-        // if nothing was improved, continue
-        if (std::all_of(was_improved.cbegin(), was_improved.cend(),
-                        [](bool v) { return !v; })) {
-            continue;
-        }
-
         auto min_sln_it = min_element(slns, was_improved);
 
         // TODO: check if this is required. doesn't seem like it's working
@@ -199,9 +193,13 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
         }
         auto min_feasible_sln_it = min_element(feasible_slns, was_improved);
 
-        // FIXME: test if this should be before we check that nothing was
-        // improved
         --lists;
+
+        // if nothing was improved, continue
+        if (std::all_of(was_improved.cbegin(), was_improved.cend(),
+                        [](bool v) { return !v; })) {
+            continue;
+        }
 
         update_tabu_lists(lists, updated_lists,
                           std::distance(slns.cbegin(), min_sln_it));

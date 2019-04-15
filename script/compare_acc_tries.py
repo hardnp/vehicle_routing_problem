@@ -61,15 +61,24 @@ def main():
 
     best_per_csv = []
     for _, data in sorted(results.items(), key=lambda x: x[0]):
+        if (len(set([e[1] for e in data])) == 1):
+            continue
         best_per_csv.append(min(data, key=lambda x: x[1])[0])
-    print('Best try:', max(best_per_csv, key=best_per_csv.count))
+
+    print('[same]:', len(results) - len(best_per_csv))
+    if not best_per_csv:
+        print('All logs are identical')
+        return
 
     tries = defaultdict(int)
     for tr in best_per_csv:
         tries[tr] += 1
 
     for tr, count in tries.items():
-        print('{tr}: {c}'.format(tr=tr, c=count))
+        print('[{tr}]: {c}'.format(tr=tr, c=count))
+
+    print('-'*27)
+    print(' best:', max(best_per_csv, key=best_per_csv.count))
 
 
 if __name__ == '__main__':
