@@ -413,6 +413,41 @@ T sum_route_part(const mat_t<T>& mat, ListIt first, ListIt last) {
 
 constexpr const double VRP_RANDOMNESS_THRESHOLD = 0.8;
 
+std::tuple<TransportationQuantity, double, double>
+get_statistics(const Problem& prob) {
+    const auto& vehicles = prob.vehicles;
+    assert(!vehicles.empty());
+    TransportationQuantity max_capacity =
+        std::max_element(vehicles.cbegin(), vehicles.cend(),
+                         [](const Vehicle& a, const Vehicle& b) {
+                             return a.capacity < b.capacity;
+                         })
+            ->capacity;
+
+    double max_fixed_cost =
+        std::max_element(vehicles.cbegin(), vehicles.cend(),
+                         [](const Vehicle& a, const Vehicle& b) {
+                             return a.fixed_cost < b.fixed_cost;
+                         })
+            ->fixed_cost;
+
+    double max_variable_cost =
+        std::max_element(vehicles.cbegin(), vehicles.cend(),
+                         [](const Vehicle& a, const Vehicle& b) {
+                             return a.variable_cost < b.variable_cost;
+                         })
+            ->variable_cost;
+
+    if (max_fixed_cost == 0.0) {
+        max_fixed_cost = 1.0;
+    }
+    if (max_variable_cost == 0.0) {
+        max_variable_cost = 1.0;
+    }
+
+    return std::make_tuple(max_capacity, max_fixed_cost, max_variable_cost);
+}
+
 /// Solve basic (capacitated) VRP with insertion heuristic
 std::vector<std::tuple<size_t, size_t, std::list<size_t>>>
 solve_vrp(const Heuristic& h, bool random = false) {
@@ -434,8 +469,18 @@ solve_vrp(const Heuristic& h, bool random = false) {
         }
     }
 
-    // static std::random_device rd;
-    // static std::mt19937 g(rd());
+    TransportationQuantity max_cap = {};
+    double max_fixed = 0.0, max_variable = 0.0;
+    std::tie(max_cap, max_fixed, max_variable) = get_statistics(h.prob());
+    const auto& prob_vehicles = h.prob().vehicles;
+    const auto vehicle_value = [max_cap, max_fixed, max_variable,
+                                &prob_vehicles](size_t i) {
+        const auto& v = prob_vehicles[i];
+        const auto fraction = v.capacity / max_cap;
+        return (v.fixed_cost / max_fixed + v.variable_cost / max_variable) -
+               (fraction.volume + fraction.weight);
+    };
+
     static std::mt19937 g;
     static std::uniform_real_distribution<> dist(0.0, 1.0);
 
@@ -449,8 +494,14 @@ solve_vrp(const Heuristic& h, bool random = false) {
             return prob.customers[a].hard_tw.first <
                    prob.customers[b].hard_tw.first;
         });
-        // TODO: sort vehicles by some criterion (e.g. capacity/cost efficiency)
-        const auto& vehicles = all_types[t].vehicles;
+
+        // sort vehicles by specific value function
+        auto vehicles = all_types[t].vehicles;
+        std::sort(vehicles.begin(), vehicles.end(),
+                  [&prob_vehicles, &vehicle_value](size_t a, size_t b) {
+                      return vehicle_value(a) < vehicle_value(b);
+                  });
+
         bool last_vehicle = false;
         for (size_t i = 0; i < vehicles.size(); ++i) {
             // FIXME: push everything in the last vehicle - no choice (?)
