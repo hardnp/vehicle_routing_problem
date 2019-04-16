@@ -7,9 +7,7 @@
 #include <vector>
 
 namespace vrp {
-/// Forward declaration
-enum class InitialHeuristic : int8_t;
-	namespace detail {
+namespace detail {
 std::vector<Solution> savings(const Problem& prob, size_t count);
-}  // detail
-}  // vrp
+}  // namespace detail
+}  // namespace vrp

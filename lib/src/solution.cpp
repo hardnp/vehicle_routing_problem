@@ -3,10 +3,8 @@
 #include <cassert>
 
 namespace vrp {
-void Solution::reset_times() { this->times.clear(); }
-
 void Solution::update_times(const Problem& prob) {
-    reset_times();
+    this->times.clear();
 
     auto& sln = *this;
 

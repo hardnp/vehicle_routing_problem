@@ -3,12 +3,12 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <iterator>
 #include <set>
 #include <stack>
 #include <type_traits>
 #include <unordered_set>
 #include <utility>
-#include <iterator>
 
 // can be overriden from the outside
 #ifndef TABU_TENURE
@@ -18,8 +18,8 @@
 
 namespace vrp {
 namespace tabu {
-
 namespace detail {
+
 #define USE_HASH_SET 1
 
 template<typename T, int Tenure> struct Entry {
