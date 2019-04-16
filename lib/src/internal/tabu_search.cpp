@@ -238,10 +238,11 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
             ls.intra_relocate(curr_sln);
         }
 
-        // curr_sln_feasible = constraints::satisfies_all(prob, curr_sln);
-        if (perform_route_saving || perform_intra_relocation) {
-            slns = repeat(curr_sln, ls.size());
-        }
+#if DYNAMIC_VIOLATIONS
+        curr_sln_feasible = constraints::satisfies_all(prob, curr_sln);
+#endif
+
+        slns = repeat(curr_sln, ls.size());
     }
 
     thread_local const auto do_post_optimization = [&](Solution& best_sln) {
