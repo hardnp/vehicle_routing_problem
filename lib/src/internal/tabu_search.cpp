@@ -16,6 +16,8 @@ namespace vrp {
 namespace detail {
 namespace {
 
+#define DYNAMIC_VIOLATIONS 0  // TODO: fix this
+
 // iterations multiplier
 constexpr const double MULTIPLIER = 1.0;
 
@@ -28,12 +30,16 @@ constexpr const double TIME_WINDOWS_PENALTY_BASE = 1.2;
 
 constexpr const uint32_t CONSTRAINTS_FIX_ITERS = 0.1 * TABU_SEARCH_ITERS;
 
+constexpr const uint32_t MAX_VIOLATION_ITERS = 3;
+
 void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
                        size_t i) {
     switch (i) {
     case 0:
-        lists.relocate = std::move(new_lists.relocate);
-        lists.pr_relocate = std::move(new_lists.pr_relocate);
+        lists.relocate = new_lists.relocate;
+        lists.pr_relocate = new_lists.pr_relocate;
+        lists.relocate_new_route = std::move(new_lists.relocate);
+        lists.pr_relocate_new_route = std::move(new_lists.pr_relocate);
         break;
     case 1:
         lists.exchange = std::move(new_lists.exchange);
@@ -48,8 +54,10 @@ void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
         lists.pr_cross = std::move(new_lists.pr_cross);
         break;
     case 4:
-        lists.relocate = std::move(new_lists.relocate);
-        lists.pr_relocate = std::move(new_lists.pr_relocate);
+        lists.relocate_new_route = new_lists.relocate_new_route;
+        lists.pr_relocate_new_route = new_lists.pr_relocate_new_route;
+        lists.relocate = std::move(new_lists.relocate_new_route);
+        lists.pr_relocate = std::move(new_lists.pr_relocate_new_route);
         break;
     case 5:
         lists.relocate_split = std::move(new_lists.relocate_split);
@@ -111,6 +119,7 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     const auto route_saving_threshold = threshold(prob);
 
     tabu::LocalSearchMethods ls(prob);
+    ls.violate_tw(true);
 
     Solution best_sln = initial_sln;
 
@@ -131,28 +140,45 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     int tw_violation_count = 1;
     auto constraints_count = CONSTRAINTS_FIX_ITERS;
 
+#if DYNAMIC_VIOLATIONS
+    bool curr_sln_feasible = false;
+    bool can_violate_tw = false;
+    uint32_t violated_tw_count = 0;
+#endif
+
     // i - iterations counter, can be reset if improvement found
     // ci - constant iterations counter, always counts forward
     for (uint32_t i = 0, ci = 0; i < TABU_SEARCH_ITERS && ci < MAX_ITERS;
          ++i, ++ci) {
 
-        ls.penalize_tw(std::pow(TIME_WINDOWS_PENALTY_BASE, tw_violation_count));
+        if (ci == 0 || constraints_count < CONSTRAINTS_FIX_ITERS * 0.9) {
+            ls.penalize_tw(
+                std::pow(TIME_WINDOWS_PENALTY_BASE, tw_violation_count));
+        }
 
-        // TODO: fix this
         --constraints_count;
         if (!constraints_count) {
             ls.penalize_tw(sqr_objective_baseline);
             constraints_count = CONSTRAINTS_FIX_ITERS;
         }
 
+#if DYNAMIC_VIOLATIONS
+        // change violation status each K iterations
+        if (can_violate_tw) {
+            ++violated_tw_count;
+        }
+        if (curr_sln_feasible) {
+            can_violate_tw = true;
+            ls.violate_tw(can_violate_tw);
+        } else if (violated_tw_count > MAX_VIOLATION_ITERS) {
+            violated_tw_count = 0;
+            can_violate_tw = false;
+            ls.violate_tw(can_violate_tw);
+        }
+#endif
+
         auto updated_lists = lists;
         do_local_search(ls, slns, updated_lists, was_improved);
-
-        // if nothing was improved, continue
-        if (std::all_of(was_improved.cbegin(), was_improved.cend(),
-                        [](bool v) { return !v; })) {
-            continue;
-        }
 
         auto min_sln_it = min_element(slns, was_improved);
 
@@ -168,6 +194,12 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
         auto min_feasible_sln_it = min_element(feasible_slns, was_improved);
 
         --lists;
+
+        // if nothing was improved, continue
+        if (std::all_of(was_improved.cbegin(), was_improved.cend(),
+                        [](bool v) { return !v; })) {
+            continue;
+        }
 
         update_tabu_lists(lists, updated_lists,
                           std::distance(slns.cbegin(), min_sln_it));
@@ -189,8 +221,9 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
 
         // found new feasible best: reset best feasible, reset iter counter to 0
         if (min_feasible_sln_it != feasible_slns.cend() &&
-            objective(prob, *min_feasible_sln_it) <
-                objective(prob, best_feasible_sln)) {
+            (objective(prob, *min_feasible_sln_it) <
+                 objective(prob, best_feasible_sln) ||
+             !constraints::satisfies_all(prob, best_feasible_sln))) {
             best_feasible_sln = *min_feasible_sln_it;
             i = 0;
         }
@@ -205,25 +238,35 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
             ls.intra_relocate(curr_sln);
         }
 
-        if (perform_route_saving || perform_intra_relocation) {
-            slns = repeat(curr_sln, ls.size());
-        }
+#if DYNAMIC_VIOLATIONS
+        curr_sln_feasible = constraints::satisfies_all(prob, curr_sln);
+#endif
+
+        slns = repeat(curr_sln, ls.size());
     }
 
     thread_local const auto do_post_optimization = [&](Solution& best_sln) {
         // post-optimization phase. drastically penalize for TW violation
         ls.penalize_tw(sqr_objective_baseline);
 
+        auto curr_sln = best_sln;
+
         for (size_t i = 0; i < 2; ++i) {
             lists = tabu::TabuLists();
-            slns = repeat(best_sln, ls.size());
+            slns = repeat(curr_sln, ls.size());
             // no tabu is required now
             do_local_search(ls, slns, lists, was_improved);
 
-            best_sln = *std::min_element(slns.cbegin(), slns.cend(), less);
+            curr_sln = *std::min_element(slns.cbegin(), slns.cend(), less);
 
             // TODO: add US heuristic as well
-            ls.intra_relocate(best_sln);
+            ls.intra_relocate(curr_sln);
+
+            if ((constraints::satisfies_all(prob, curr_sln) ||
+                 !constraints::satisfies_all(prob, best_sln)) &&
+                objective(prob, curr_sln) < objective(prob, best_sln)) {
+                best_sln = curr_sln;
+            }
         }
     };
 

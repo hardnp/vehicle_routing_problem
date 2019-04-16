@@ -80,6 +80,12 @@ public:
                                       this->weight + other.weight};
     }
 
+    inline TransportationQuantity operator/(TransportationQuantity other) const
+        noexcept {
+        return TransportationQuantity{this->volume / other.volume,
+                                      this->weight / other.weight};
+    }
+
     inline TransportationQuantity operator*(int v) const noexcept {
         return TransportationQuantity{this->volume * v, this->weight * v};
     }

@@ -133,6 +133,8 @@ public:
     tabu_list_t cross = {};
     // pair of customer && route
     tabu_list_t relocate_split = {};
+    // pair of customer && route
+    tabu_list_t relocate_new_route = {};
 
     // preserve lists. each entry is a customer index
     preserve_list_t pr_exchange = {};
@@ -140,6 +142,7 @@ public:
     preserve_list_t pr_two_opt = {};
     preserve_list_t pr_cross = {};
     preserve_list_t pr_relocate_split = {};
+    preserve_list_t pr_relocate_new_route = {};
 
     TabuLists& operator--() {
         exchange.decrement();
@@ -147,12 +150,14 @@ public:
         two_opt.decrement();
         cross.decrement();
         relocate_split.decrement();
+        relocate_new_route.decrement();
 
         pr_exchange.decrement();
         pr_relocate.decrement();
         pr_two_opt.decrement();
         pr_cross.decrement();
         pr_relocate_split.decrement();
+        pr_relocate_new_route.decrement();
 
         return *this;
     }
@@ -163,12 +168,14 @@ public:
         two_opt.clear();
         cross.clear();
         relocate_split.clear();
+        relocate_new_route.clear();
 
         pr_exchange.clear();
         pr_relocate.clear();
         pr_two_opt.clear();
         pr_cross.clear();
         pr_relocate_split.clear();
+        pr_relocate_new_route.clear();
     }
 };
 }  // namespace tabu

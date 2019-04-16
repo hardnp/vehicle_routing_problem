@@ -16,7 +16,8 @@ class LocalSearchMethods {
     using methods_t = std::vector<std::function<bool(Solution&, TabuLists&)>>;
     methods_t m_methods = methods_t(6);
 
-    double m_tw_penalty = 0.0;  ///< penalty for time windows violation
+    double m_tw_penalty = 0.0;      ///< penalty for time windows violation
+    bool m_can_violate_tw = false;  ///< flag to specify if TW can be violated
 
     bool m_explore_all_neighbourhoods =
         false;  ///< explore all solution, do not use "first improvement"
@@ -50,6 +51,7 @@ public:
 
     // time windows management:
     void penalize_tw(double value);
+    void violate_tw(bool value);
 };
 }  // namespace tabu
 }  // namespace vrp
