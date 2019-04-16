@@ -22,8 +22,8 @@ namespace {
 constexpr const double MULTIPLIER = 1.0;
 
 // constants
-constexpr const uint32_t MAX_ITERS = std::numeric_limits<uint32_t>::max();
 constexpr const uint32_t TABU_SEARCH_ITERS = 100 * MULTIPLIER;
+constexpr const uint32_t MAX_ITERS = 10 * TABU_SEARCH_ITERS;
 constexpr const uint32_t ROUTE_SAVING_ITERS = 5 * MULTIPLIER;
 constexpr const uint32_t INTRA_RELOCATION_ITERS = 15 * MULTIPLIER;
 constexpr const double TIME_WINDOWS_PENALTY_BASE = 1.2;
