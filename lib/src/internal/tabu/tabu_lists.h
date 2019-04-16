@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <iterator>
 #include <set>
 #include <stack>
 #include <type_traits>
@@ -17,8 +18,8 @@
 
 namespace vrp {
 namespace tabu {
-
 namespace detail {
+
 #define USE_HASH_SET 1
 
 template<typename T, int Tenure> struct Entry {

@@ -4,6 +4,8 @@
 
 namespace vrp {
 void Solution::update_times(const Problem& prob) {
+    this->times.clear();
+
     auto& sln = *this;
 
     sln.times.reserve(sln.routes.size());
