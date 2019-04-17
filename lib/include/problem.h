@@ -119,6 +119,7 @@ public:
                                           /// soft time windows
     // TODO: add to CSV
     double time_coeff = 0.0;  ///< time scale coefficient for objective
+    int max_splits = 1;  ///< max number of vehicles delivering to a customer
 
     // TODO: should be part of ctor
     void set_up() {

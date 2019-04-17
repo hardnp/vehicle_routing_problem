@@ -55,13 +55,17 @@ class Heuristic;
 
 std::unordered_map<size_t, std::vector<size_t>> select_seeds(const Heuristic&);
 
+constexpr const int M = std::numeric_limits<int>::max() / 2;  // big value
+
 /// Heuristic class that solves the relaxed 0-1 Integer Problem
 class Heuristic {
     const Problem& m_prob;
 
     IloEnv m_env;
-    std::vector<IloIntVarArray> m_x;  ///< x[i][t]: 1 if customer i is assigned
+    std::vector<IloNumVarArray> m_x;  ///< x[i][t]: 1 if customer i is assigned
                                       /// to vehicle t. index is customer
+    std::vector<IloIntVarArray> m_y;  ///< y[i][t]: internal value that forces
+                                      ///< x[i][t] to be an integer or float
     IloModel m_model = IloModel(m_env);
     IloCplex m_algo = IloCplex(m_model);
     IloObjective m_objective;
@@ -87,7 +91,7 @@ class Heuristic {
 
 public:
     inline IloEnv& env() { return m_env; }
-    inline std::vector<IloIntVarArray>& X() { return m_x; }
+    inline std::vector<IloNumVarArray>& X() { return m_x; }
     inline IloModel& model() { return m_model; }
     inline IloCplex& algo() { return m_algo; }
     inline IloObjective& objective() { return m_objective; }
@@ -105,8 +109,14 @@ public:
         const auto& types = prob.vehicle_types();
         const auto types_size = types.size();
 
+        m_x.reserve(n_customers);
         for (size_t i = 1; i < n_customers; ++i) {
-            m_x.emplace_back(IloIntVarArray(m_env, types_size, 0.0, 1.0));
+            m_x.emplace_back(IloNumVarArray(m_env, types_size, 0.0, 1.0));
+        }
+
+        m_y.reserve(n_customers);
+        for (size_t i = 1; i < n_customers; ++i) {
+            m_y.emplace_back(IloIntVarArray(m_env, types_size, 0, 1));
         }
 
         {
@@ -162,7 +172,6 @@ public:
         {
             // Note: double constraints due to volume && weight
             // (1)
-            // TODO: is the function correct?
             int total_volume = 0;
             int total_weight = 0;
             for (const auto& type : types) {
@@ -236,7 +245,6 @@ public:
 
         {
             // (3)
-            // TODO: is this correct?
             IloConstraintArray balancing_constraints(m_env);
             for (size_t t = 0; t < types.size(); ++t) {
                 const auto& vehicles = types[t].vehicles;
@@ -272,6 +280,34 @@ public:
                 }
             }
             m_model.add(balancing_constraints);
+        }
+
+        {
+            // split delivery constraints
+            IloConstraintArray limit_constraints1(m_env),
+                limit_constraints2(m_env);
+
+            assert(m_x.size() == m_y.size());
+            for (size_t i = 0; i < m_x.size(); ++i) {
+                assert(m_x[i].getSize() == m_y[i].getSize());
+                for (int t = 0; t < m_x[i].getSize(); ++t) {
+                    limit_constraints1.add(m_y[i][t] >= m_x[i][t]);
+                    limit_constraints2.add(m_y[i][t] <= M * m_x[i][t]);
+                }
+            }
+            m_model.add(limit_constraints1);
+            m_model.add(limit_constraints2);
+
+            const int split_value = prob.max_splits;
+            IloConstraintArray split_constraints(m_env);
+            for (size_t i = 0; i < m_y.size(); ++i) {
+                IloExpr sum(m_env);
+                for (int t = 0; t < m_y[i].getSize(); ++t) {
+                    sum += m_y[i][t];
+                }
+                split_constraints.add(sum <= split_value);
+            }
+            m_model.add(split_constraints);
         }
     }
 
@@ -391,7 +427,8 @@ std::unordered_map<size_t, std::list<size_t>> group(const Heuristic& h,
     std::unordered_map<size_t, std::list<size_t>> routes;
     for (size_t c = 0; c < assignment_map.size(); ++c) {
         const auto& types = assignment_map[c];
-        auto chosen_type = std::find(types.cbegin(), types.cend(), 1.0);
+        // TODO: fix this for split case
+        auto chosen_type = std::max_element(types.cbegin(), types.cend());
         size_t t = std::distance(types.cbegin(), chosen_type);
         routes[t].emplace_back(c + depot_offset);
     }
