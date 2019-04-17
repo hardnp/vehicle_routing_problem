@@ -977,3 +977,6 @@ table time
 value max_violated_soft_tw
 0
 
+value max_splits
+2
+
