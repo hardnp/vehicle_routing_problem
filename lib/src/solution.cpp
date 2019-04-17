@@ -84,6 +84,4 @@ bool Solution::operator==(const Solution& other) const {
     }
     return true;
 }
-
-Solution::operator bool() { return this->routes.empty(); }
 }  // namespace vrp

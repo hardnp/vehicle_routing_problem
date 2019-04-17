@@ -3,25 +3,26 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <functional>
 #include <list>
 #include <numeric>
 #include <random>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 #define ILOUSESTL
 using namespace std;
 #include "ilcplex/ilocplex.h"
 
-/// Specify that the variable x is unused in the code
-#define UNUSED(x) (void)x
-
 namespace vrp {
 namespace detail {
 
 namespace {
+constexpr const double SPLIT_THRESHOLD = 0.3;
+
 inline int volume(const TransportationQuantity& q) { return q.volume; }
 inline int weight(const TransportationQuantity& q) { return q.weight; }
 
@@ -348,10 +349,11 @@ public:
         auto assignment_map = this->get_values();
         std::unordered_map<size_t, size_t> mapped_types;
         for (size_t c = 0; c < assignment_map.size(); ++c) {
-            const auto& types = assignment_map[c];
-            // TODO: fix this for split case
-            auto chosen_type = std::max_element(types.cbegin(), types.cend());
-            size_t t = std::distance(types.cbegin(), chosen_type);
+            const auto& type_ratios = assignment_map[c];
+            // TODO: fix this for split case or leave as is?
+            auto chosen_type =
+                std::max_element(type_ratios.cbegin(), type_ratios.cend());
+            size_t t = std::distance(type_ratios.cbegin(), chosen_type);
             mapped_types[c + depot_offset] = t;
         }
         return mapped_types;
@@ -421,19 +423,95 @@ std::vector<double> calculate_weights(const Problem& prob) {
     return weights;
 }
 
+inline double round_to_1digit(double value) {
+    return std::round(value * 10) / 10;
+}
+
+/// Fix type ratios (split delivery)
+std::vector<double>
+fix_vehicle_type_ratios(const TransportationQuantity& demand,
+                        const std::vector<double>& types) {
+    // TODO: think of a better way to fix ratios
+
+    // FIXME: this function logic is just plain awful
+
+    std::vector<double> fixed_type_ratios(types);
+    const auto size = fixed_type_ratios.size();
+
+    // replace elements less than the threshold with 0.0; "spread" the
+    // fractions across other values
+    for (size_t t = 0; t < size; ++t) {
+        auto r = fixed_type_ratios[t];
+        if (r < SPLIT_THRESHOLD) {
+            fixed_type_ratios[t] = 0.0;
+            for (size_t j = t + 1; j < size; ++j) {
+                fixed_type_ratios[j] += r / (size - (t + 1));
+            }
+        }
+    }
+
+    // align all ratios to customer demand (demand must be integrally
+    // dividable)
+    std::unordered_map<size_t, double> non_zero_aligned_ratios;
+    for (size_t t = 0; t < size; ++t) {
+        if (fixed_type_ratios[t] == 0.0) {
+            continue;
+        }
+        non_zero_aligned_ratios[t] = fixed_type_ratios[t];
+    }
+
+    assert(demand.volume == demand.weight);  // TODO: this is very wrong!
+
+    // TODO: the logic here is very fishy, it has to be changed
+    const size_t length = non_zero_aligned_ratios.size();
+    for (auto it = non_zero_aligned_ratios.begin();
+         it != non_zero_aligned_ratios.end(); ++it) {
+        double ratio = it->second;
+        int volume = demand.volume;
+        // Note: volume is the main characteristic of the quantity
+        int int_fraction = std::round(ratio * volume);
+        double double_fraction = ratio * volume;
+        if (static_cast<double>(int_fraction) != double_fraction) {
+            double new_ratio = double(int_fraction) / volume;
+            it->second = new_ratio;
+            for (auto it2 = std::next(it); it2 != non_zero_aligned_ratios.end();
+                 ++it2) {
+                it2->second +=
+                    (ratio - new_ratio) /
+                    (length - std::distance(std::next(it),
+                                            non_zero_aligned_ratios.end()));
+                assert(it2->second >= 0.0);
+            }
+        }
+    }
+
+    std::fill(fixed_type_ratios.begin(), fixed_type_ratios.end(), 0.0);
+    for (const auto& t_and_ratio : non_zero_aligned_ratios) {
+        fixed_type_ratios[t_and_ratio.first] = t_and_ratio.second;
+    }
+
+    return fixed_type_ratios;
+}
+
 /// Get non-constructed groups of customers that belong to the same routes
-std::unordered_map<size_t, std::list<size_t>> group(const Heuristic& h,
-                                                    size_t depot_offset = 0) {
+std::pair<std::unordered_map<size_t, std::list<size_t>>,
+          std::unordered_map<size_t, SplitInfo>>
+group(const Heuristic& h, size_t depot_offset = 0) {
     auto assignment_map = h.get_values();
     std::unordered_map<size_t, std::list<size_t>> routes;
+    std::unordered_map<size_t, SplitInfo> splits;
     for (size_t c = 0; c < assignment_map.size(); ++c) {
-        const auto& types = assignment_map[c];
-        // TODO: fix this for split case
-        auto chosen_type = std::max_element(types.cbegin(), types.cend());
-        size_t t = std::distance(types.cbegin(), chosen_type);
-        routes[t].emplace_back(c + depot_offset);
+        auto types = fix_vehicle_type_ratios(h.prob().customers[c].demand,
+                                             assignment_map[c]);
+        for (size_t t = 0; t < types.size(); ++t) {
+            if (types[t] == 0.0) {
+                continue;
+            }
+            routes[t].emplace_back(c + depot_offset);
+            splits[c + depot_offset].split_info[t] = types[t];
+        }
     }
-    return routes;
+    return std::make_pair(routes, splits);
 }
 
 template<typename T> using mat_t = std::vector<std::vector<T>>;
@@ -487,10 +565,14 @@ get_statistics(const Problem& prob) {
 }
 
 /// Solve basic (capacitated) VRP with insertion heuristic
-std::vector<std::tuple<size_t, size_t, std::list<size_t>>>
+std::pair<std::vector<std::tuple<size_t, size_t, std::list<size_t>>>,
+          std::unordered_map<size_t, SplitInfo>>
 solve_vrp(const Heuristic& h, bool random = false) {
+    std::unordered_map<size_t, std::list<size_t>> typed_customers;
+    std::unordered_map<size_t, SplitInfo> customer_splits;
     // depot_offset = 1 due to depot at index 0:
-    auto typed_customers = group(h, 1);
+    std::tie(typed_customers, customer_splits) = group(h, 1);
+
     const auto& prob = h.prob();
     static constexpr const size_t depot = 0;
     std::unordered_map<size_t, std::list<size_t>> routes{};
@@ -560,7 +642,9 @@ solve_vrp(const Heuristic& h, bool random = false) {
                 for (const auto& c : unrouted) {
                     // skip if capacity is exceeded
                     if (!last_vehicle &&
-                        running_capacity < prob.customers[c].demand) {
+                        running_capacity <
+                            prob.customers[c].demand *
+                                customer_splits[c].split_info[t]) {
                         continue;
                     }
                     if (!last_vehicle && random &&
@@ -647,7 +731,8 @@ solve_vrp(const Heuristic& h, bool random = false) {
                 route = std::move(updated_route);
                 assert(route.size() > 2);
 
-                running_capacity -= prob.customers[c].demand;
+                running_capacity -=
+                    prob.customers[c].demand * customer_splits[c].split_info[t];
                 nothing_to_add = false;
             }
         }
@@ -665,18 +750,30 @@ solve_vrp(const Heuristic& h, bool random = false) {
         }
     }
 
-    return cleaned_routes;
+    return std::make_pair(cleaned_routes, customer_splits);
 }
 
 Solution routes_to_sln(
     const Problem& prob,
-    std::vector<std::tuple<size_t, size_t, std::list<size_t>>> routes) {
+    std::pair<std::vector<std::tuple<size_t, size_t, std::list<size_t>>>,
+              std::unordered_map<size_t, SplitInfo>>
+        routes_and_splits) {
+    const auto& routes = routes_and_splits.first;
+    const auto& splits = routes_and_splits.second;
+
     Solution sln;
     sln.routes.reserve(routes.size());
     for (auto& values : routes) {
         sln.routes.emplace_back(std::get<1>(values),
                                 std::move(std::get<2>(values)));
     }
+
+    sln.customer_splits.resize(prob.n_customers());
+    for (const auto& customer_and_splits : splits) {
+        sln.customer_splits[customer_and_splits.first] =
+            customer_and_splits.second;
+    }
+
     return sln;
 }
 
@@ -688,7 +785,7 @@ select_seeds(const Heuristic& h) {
 
     // the customer on the route with the largest seed weight becomes the seed
     // point of the route
-    auto routes = solve_vrp(h);
+    auto routes = solve_vrp(h).first;  // TODO: can ignore splits here?
     // TODO: in fact, we don't need routes...
     for (auto& vehicle_route : routes) {
         auto& route = std::get<2>(vehicle_route);

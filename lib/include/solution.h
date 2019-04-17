@@ -5,11 +5,27 @@
 #include "vehicle.h"
 
 #include <list>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 namespace vrp {
+/// Split info representation
+struct SplitInfo {
+    struct DoubleWrapper {
+        double value = 1.0;
+        inline operator double() const noexcept { return value; }
+        inline DoubleWrapper& operator=(double v) {
+            value = v;
+            return *this;
+        }
+    };
+    std::unordered_map<size_t, DoubleWrapper>
+        split_info;  ///< mapping of route id to ratio
+    inline operator bool() const noexcept { return !split_info.empty(); }
+};
+
 /// Solution representation
 class Solution {
 public:
@@ -28,6 +44,8 @@ public:
     std::unordered_set<VehicleIndex>
         used_vehicles;  ///< vehicles used by solution
 
+    std::vector<SplitInfo> customer_splits;  ///< split info for each customer
+
     void update_times(const Problem& prob);
 
     void update_customer_owners(const Problem& prob);
@@ -38,6 +56,6 @@ public:
 
     bool operator==(const Solution& other) const;
 
-    explicit operator bool();
+    inline operator bool() const noexcept { return this->routes.empty(); }
 };
 }  // namespace vrp
