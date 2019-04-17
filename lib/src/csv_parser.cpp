@@ -56,10 +56,10 @@ read_file(std::istream& stream) {
 }
 
 /// Checks that all tables have corresponding range
-void check_all_tables_exist(
-    std::vector<std::string> all_tables,
+void check_all_values_exist(
+    std::vector<std::string> names,
     const std::map<std::string, std::pair<uint64_t, uint64_t>>& data_ranges) {
-    for (const auto& name : all_tables) {
+    for (const auto& name : names) {
         if (data_ranges.cend() == std::find_if(data_ranges.cbegin(),
                                                data_ranges.cend(),
                                                [&name](const auto& pair) {
@@ -84,10 +84,11 @@ Problem CsvParser::read(std::istream& in) const {
     auto read_data = read_file(in);
     auto& content = read_data.first;
     auto& data_ranges = read_data.second;
-    check_all_tables_exist({detail::CustomerTableParser::table_name,
+    check_all_values_exist({detail::CustomerTableParser::table_name,
                             detail::VehicleTableParser::table_name,
                             detail::CostTableParser::table_name,
-                            detail::TimeTableParser::table_name},
+                            detail::TimeTableParser::table_name,
+                            "max_violated_soft_tw", "max_splits"},
                            data_ranges);
     Problem problem = {};
     problem.customers =
@@ -110,6 +111,11 @@ Problem CsvParser::read(std::istream& in) const {
         detail::IntValueParser(content, data_ranges.at("max_violated_soft_tw"),
                                1, this->m_delimiter)
             .get();
+    problem.max_splits =
+        std::max(problem.max_splits,
+                 detail::IntValueParser(content, data_ranges.at("max_splits"),
+                                        1, this->m_delimiter)
+                     .get());
     problem.set_up();
 
     return problem;

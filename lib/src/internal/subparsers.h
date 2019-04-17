@@ -106,7 +106,7 @@ public:
     std::vector<std::vector<int>> get() const;
 };
 
-/// 64-bit unsigned integer parser
+/// 32-bit integer parser
 /*!
  *
  * Format:

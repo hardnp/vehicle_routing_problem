@@ -349,7 +349,8 @@ public:
         std::unordered_map<size_t, size_t> mapped_types;
         for (size_t c = 0; c < assignment_map.size(); ++c) {
             const auto& types = assignment_map[c];
-            auto chosen_type = std::find(types.cbegin(), types.cend(), 1.0);
+            // TODO: fix this for split case
+            auto chosen_type = std::max_element(types.cbegin(), types.cend());
             size_t t = std::distance(types.cbegin(), chosen_type);
             mapped_types[c + depot_offset] = t;
         }
