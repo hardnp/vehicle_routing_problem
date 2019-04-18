@@ -21,8 +21,6 @@ namespace vrp {
 namespace detail {
 
 namespace {
-constexpr const double SPLIT_THRESHOLD = 0.3;
-
 inline int volume(const TransportationQuantity& q) { return q.volume; }
 inline int weight(const TransportationQuantity& q) { return q.weight; }
 
@@ -423,74 +421,103 @@ std::vector<double> calculate_weights(const Problem& prob) {
     return weights;
 }
 
-inline double round_to_1digit(double value) {
-    return std::round(value * 10) / 10;
-}
-
 /// Fix type ratios (split delivery)
-std::vector<double>
-fix_vehicle_type_ratios(const TransportationQuantity& demand,
-                        const std::vector<double>& types) {
-    // TODO: think of a better way to fix ratios
+std::vector<double> fix_ratios(const TransportationQuantity& demand,
+                               const std::vector<double>& ratios) {
+    // TODO: simplify algorithm
 
-    // FIXME: this function logic is just plain awful
-
-    std::vector<double> fixed_type_ratios(types);
-    const auto size = fixed_type_ratios.size();
-
-    // replace elements less than the threshold with 0.0; "spread" the
-    // fractions across other values
-    for (size_t t = 0; t < size; ++t) {
-        auto r = fixed_type_ratios[t];
-        if (r < SPLIT_THRESHOLD) {
-            fixed_type_ratios[t] = 0.0;
-            for (size_t j = t + 1; j < size; ++j) {
-                fixed_type_ratios[j] += r / (size - (t + 1));
-            }
-        }
+    // skip non-floating cases - [0, ..., 1.0, ..., 0]
+    if (ratios.cend() != std::find(ratios.cbegin(), ratios.cend(), 1.0)) {
+        return ratios;
     }
 
-    // align all ratios to customer demand (demand must be integrally
-    // dividable)
-    std::unordered_map<size_t, double> non_zero_aligned_ratios;
-    for (size_t t = 0; t < size; ++t) {
-        if (fixed_type_ratios[t] == 0.0) {
+    // TODO: what is a proper threshold? real ratios can be < 0.25!
+    static constexpr const double split_thr = 0.25;
+
+    std::unordered_map<size_t, double> ratio_map;
+    ratio_map.reserve(ratios.size());
+    // insert elements > threshold
+    for (size_t t = 0, size = ratios.size(); t < size; ++t) {
+        auto r = ratios[t];
+        if (r < split_thr) {
             continue;
         }
-        non_zero_aligned_ratios[t] = fixed_type_ratios[t];
+        ratio_map[t] = r;
     }
-
-    assert(demand.volume == demand.weight);  // TODO: this is very wrong!
-
-    // TODO: the logic here is very fishy, it has to be changed
-    const size_t length = non_zero_aligned_ratios.size();
-    for (auto it = non_zero_aligned_ratios.begin();
-         it != non_zero_aligned_ratios.end(); ++it) {
-        double ratio = it->second;
-        int volume = demand.volume;
-        // Note: volume is the main characteristic of the quantity
-        int int_fraction = std::round(ratio * volume);
-        double double_fraction = ratio * volume;
-        if (static_cast<double>(int_fraction) != double_fraction) {
-            double new_ratio = double(int_fraction) / volume;
-            it->second = new_ratio;
-            for (auto it2 = std::next(it); it2 != non_zero_aligned_ratios.end();
-                 ++it2) {
-                it2->second +=
-                    (ratio - new_ratio) /
-                    (length - std::distance(std::next(it),
-                                            non_zero_aligned_ratios.end()));
-                assert(it2->second >= 0.0);
-            }
+    // split elements < threshold between ratios
+    for (size_t t = 0, size = ratios.size(); t < size; ++t) {
+        auto r = ratios[t];
+        if (r >= split_thr) {
+            continue;
+        }
+        for (auto& p : ratio_map) {
+            p.second += r / ratio_map.size();
         }
     }
 
-    std::fill(fixed_type_ratios.begin(), fixed_type_ratios.end(), 0.0);
-    for (const auto& t_and_ratio : non_zero_aligned_ratios) {
-        fixed_type_ratios[t_and_ratio.first] = t_and_ratio.second;
+    assert(demand.volume != 0);
+    assert(demand.volume == demand.weight);
+    const auto volume = demand.volume;
+
+    // construct ratios aligned to demand
+    const int grain_size = static_cast<int>(std::ceil(volume * split_thr));
+    std::vector<double> aligned_ratios;
+    for (int start = grain_size; start <= volume; ++start) {
+        aligned_ratios.emplace_back(static_cast<double>(start) / volume);
     }
 
-    return fixed_type_ratios;
+    // remember min ratio: "sacrifice" it in a way to properly align numbers
+    auto min = std::min_element(
+        ratio_map.begin(), ratio_map.end(),
+        [](const auto& a, const auto& b) { return a.second < b.second; });
+
+    // find closest value to `e` in the given vector
+    static const auto closest = [](std::vector<double>& values,
+                                   double e) -> double {
+        assert(!values.empty());
+        auto greater_or_equal =
+            std::lower_bound(values.cbegin(), values.cend(), e);
+        if (greater_or_equal == values.cend()) {
+            return *std::prev(values.cend());
+        }
+#if 0  // TODO: closer value - is it worth it?
+        if (greater_or_equal == values.cbegin()) {
+            return *greater_or_equal;
+        }
+
+        auto lower = std::prev(greater_or_equal);
+        // if e is closer to lower, return lower. otherwise, return lower_bound
+        if (e - *lower < *greater_or_equal - e) {
+            return *lower;
+        } else {
+            return *greater_or_equal;
+        }
+#endif
+        return *greater_or_equal;
+    };
+
+    // align ratios
+    double sum = 0.0;
+    for (auto& p : ratio_map) {
+        if (p == *min) {
+            continue;
+        }
+        p.second = closest(aligned_ratios, p.second);
+        sum += p.second;
+    }
+    min->second = 1.0 - sum;  // min value is guaranteed to be aligned, because
+                              // other values are already aligned
+
+    // construct result
+    std::vector<double> fixed_ratios(ratios.size(), 0.0);
+    for (const auto& p : ratio_map) {
+        fixed_ratios[p.first] = p.second;
+    }
+
+    assert(1.0 ==
+           std::accumulate(fixed_ratios.cbegin(), fixed_ratios.cend(), 0.0));
+
+    return fixed_ratios;
 }
 
 /// Get non-constructed groups of customers that belong to the same routes
@@ -501,8 +528,8 @@ group(const Heuristic& h, size_t depot_offset = 0) {
     std::unordered_map<size_t, std::list<size_t>> routes;
     std::unordered_map<size_t, SplitInfo> splits;
     for (size_t c = 0; c < assignment_map.size(); ++c) {
-        auto types = fix_vehicle_type_ratios(h.prob().customers[c].demand,
-                                             assignment_map[c]);
+        auto types = fix_ratios(h.prob().customers[c + depot_offset].demand,
+                                assignment_map[c]);
         for (size_t t = 0; t < types.size(); ++t) {
             if (types[t] == 0.0) {
                 continue;
@@ -603,6 +630,8 @@ solve_vrp(const Heuristic& h, bool random = false) {
 
     static std::mt19937 g;
     static std::uniform_real_distribution<> dist(0.0, 1.0);
+
+    std::unordered_map<size_t, SplitInfo> splits_by_vehicles;
 
     // Insertion heuristic, variation 2: c1 is not needed (?), c2 is minimized.
     // params of c2:
@@ -734,9 +763,15 @@ solve_vrp(const Heuristic& h, bool random = false) {
                 running_capacity -=
                     prob.customers[c].demand * customer_splits[c].split_info[t];
                 nothing_to_add = false;
+
+                // convert types to vehicles in SplitInfo
+                splits_by_vehicles[c].split_info[v] =
+                    customer_splits[c].split_info[t];
             }
         }
     }
+
+    assert(splits_by_vehicles.size() == customer_splits.size());
 
     // return only real routes (if route consists of <= 2 nodes, it's actually
     // empty - "size 2" stands for in-depot and out-depot)
@@ -750,7 +785,7 @@ solve_vrp(const Heuristic& h, bool random = false) {
         }
     }
 
-    return std::make_pair(cleaned_routes, customer_splits);
+    return std::make_pair(cleaned_routes, splits_by_vehicles);
 }
 
 Solution routes_to_sln(
@@ -759,17 +794,31 @@ Solution routes_to_sln(
               std::unordered_map<size_t, SplitInfo>>
         routes_and_splits) {
     const auto& routes = routes_and_splits.first;
-    const auto& splits = routes_and_splits.second;
+    const auto& split_by_vehicles = routes_and_splits.second;
 
     Solution sln;
     sln.routes.reserve(routes.size());
+
+    std::unordered_map<size_t, SplitInfo> splits_by_routes;
     for (auto& values : routes) {
-        sln.routes.emplace_back(std::get<1>(values),
-                                std::move(std::get<2>(values)));
+        const size_t vehicle = std::get<1>(values);
+        sln.routes.emplace_back(vehicle, std::move(std::get<2>(values)));
+
+        // convert vehicles to routes in SplitInfo
+        const size_t rid = sln.routes.size() - 1;  // always last inserted route
+        for (const auto& p : split_by_vehicles) {
+            if (!p.second.has(vehicle)) {
+                continue;
+            }
+            splits_by_routes[p.first].split_info[rid] =
+                p.second.split_info.at(vehicle);
+        }
     }
 
+    assert(splits_by_routes.size() == split_by_vehicles.size());
+
     sln.customer_splits.resize(prob.n_customers());
-    for (const auto& customer_and_splits : splits) {
+    for (const auto& customer_and_splits : splits_by_routes) {
         sln.customer_splits[customer_and_splits.first] =
             customer_and_splits.second;
     }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <ostream>
 
 namespace vrp {
@@ -95,8 +96,9 @@ public:
     }
 
     inline TransportationQuantity operator*(double v) const noexcept {
-        return TransportationQuantity{static_cast<int>(this->volume * v),
-                                      static_cast<int>(this->weight * v)};
+        return TransportationQuantity{
+            static_cast<int>(std::round(v * this->volume)),
+            static_cast<int>(std::round(v * this->weight))};
     }
 
     inline bool operator==(int v) const noexcept {

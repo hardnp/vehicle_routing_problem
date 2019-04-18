@@ -13,17 +13,23 @@
 namespace vrp {
 /// Split info representation
 struct SplitInfo {
-    struct DoubleWrapper {
-        double value = 1.0;
-        inline operator double() const noexcept { return value; }
-        inline DoubleWrapper& operator=(double v) {
-            value = v;
+    // TODO: decide upon proper design and usage
+    struct Ratio {
+        double d = 0.0;  ///< ratio as a double value
+        // int i = 0.0;     ///< ratio as an integral value (a part of quantity)
+        inline operator double() const noexcept { return d; }
+        inline Ratio& operator=(double v) {
+            d = v;
             return *this;
         }
     };
-    std::unordered_map<size_t, DoubleWrapper>
-        split_info;  ///< mapping of route id to ratio
-    inline operator bool() const noexcept { return !split_info.empty(); }
+    std::unordered_map<size_t, Ratio> split_info;  ///< index mapped to ratio
+    inline bool is_split() const noexcept { return split_info.size() > 1; }
+    inline bool has(size_t i) const noexcept {
+        return split_info.cend() !=
+               std::find_if(split_info.cbegin(), split_info.cend(),
+                            [i](const auto& p) { return p.first == i; });
+    }
 };
 
 /// Solution representation
