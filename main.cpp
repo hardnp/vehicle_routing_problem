@@ -33,6 +33,20 @@ public:
     ~FileHandler() { m_file.close(); }
 };
 
+void print_constraints(const vrp::Problem& prob, const vrp::Solution& sln,
+                       const std::string& name) {
+    LOG_INFO << name << " solution satisfies Capacity: "
+             << vrp::constraints::satisfies_capacity(prob, sln) << EOL;
+    LOG_INFO << name << " solution satisfies Site-Dependency: "
+             << vrp::constraints::satisfies_site_dependency(prob, sln) << EOL;
+    LOG_INFO << name << " solution satisfies Time Windows: "
+             << vrp::constraints::satisfies_time_windows(prob, sln) << EOL;
+    LOG_INFO << name << " solution's total violated time: "
+             << vrp::constraints::total_violated_time(prob, sln) << EOL;
+    LOG_INFO << "Objective = " << vrp::objective(prob, sln) << EOL;
+    LOG_INFO << "Cost func = " << vrp::cost_function(prob, sln) << EOL;
+}
+
 void print_fmt(double objective, int violated_time,
                vrp::TransportationQuantity violated_q) {
     LOG_DEBUG << " SOLUTION: " << objective << " | " << violated_time << " | "
@@ -90,21 +104,7 @@ int main(int argc, char* argv[]) {
         [&problem](const auto& a, const auto& b) {
             return objective(problem, a) < objective(problem, b);
         });
-    LOG_INFO << "Initial solution satisfies Capacity: "
-             << vrp::constraints::satisfies_capacity(problem, best_initial_sln)
-             << EOL;
-    LOG_INFO << "Initial solution satisfies Site-Dependency: "
-             << vrp::constraints::satisfies_site_dependency(problem,
-                                                            best_initial_sln)
-             << EOL;
-    LOG_INFO << "Initial solution satisfies Time Windows: "
-             << vrp::constraints::satisfies_time_windows(problem,
-                                                         best_initial_sln)
-             << EOL;
-    LOG_INFO << "Initial solution's total violated time: "
-             << vrp::constraints::total_violated_time(problem, best_initial_sln)
-             << EOL;
-    LOG_INFO << "Objective = " << objective(problem, best_initial_sln) << EOL;
+    print_constraints(problem, best_initial_sln, "Initial");
 #endif
 
     std::vector<vrp::Solution> improved_solutions(solutions.size());
@@ -141,17 +141,7 @@ int main(int argc, char* argv[]) {
     parser.write(std::cout, problem, best_sln);
 
     if (print_debug_info) {
-        LOG_INFO << "Improved solution satisfies Capacity: "
-                 << vrp::constraints::satisfies_capacity(problem, best_sln)
-                 << EOL;
-        LOG_INFO << "Improved solution satisfies Site-Dependency: "
-                 << vrp::constraints::satisfies_site_dependency(problem,
-                                                                best_sln)
-                 << EOL;
-        LOG_INFO << "Improved solution satisfies Time Windows: "
-                 << vrp::constraints::satisfies_time_windows(problem, best_sln)
-                 << EOL;
-        LOG_INFO << "Cost func = " << cost_function(problem, best_sln) << EOL;
+        print_constraints(problem, best_sln, "Improved");
         print_fmt(objective(problem, best_sln),
                   vrp::constraints::total_violated_time(problem, best_sln),
                   vrp::constraints::total_violated_capacity(problem, best_sln));
