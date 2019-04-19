@@ -246,6 +246,12 @@ LocalSearchMethods::LocalSearchMethods(const Problem& prob) noexcept
                              std::placeholders::_1, std::placeholders::_2);
     m_methods[5] = std::bind(&LocalSearchMethods::relocate_split, this,
                              std::placeholders::_1, std::placeholders::_2);
+
+    if (!prob.enable_splits()) {
+        for (size_t c = 0, size = prob.n_customers(); c < size; ++c) {
+            m_default_split_info.split_info[c] = 1.0;
+        }
+    }
 }
 
 LocalSearchMethods::methods_t::iterator LocalSearchMethods::begin() {
@@ -307,6 +313,10 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
         if (is_loop(route_in)) {
             continue;
         }
+        SplitInfo& split_in = sln.route_splits[r_in];
+        if (is_split(split_in, customer)) {
+            continue;
+        }
         for (size_t neighbour : descending_sort_customers) {
             if (customer == neighbour) {
                 continue;
@@ -328,11 +338,9 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                 continue;
             }
 
-            SplitInfo split_in = sln.route_splits[r_in];
-            SplitInfo split_out = sln.route_splits[r_out];
+            SplitInfo& split_out = sln.route_splits[r_out];
             // skip split customers
-            if (is_split(split_in, customer) ||
-                is_split(split_out, neighbour)) {
+            if (is_split(split_out, neighbour)) {
                 continue;
             }
 
@@ -378,7 +386,7 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
             }
 
             transfer_split_entry(m_enable_splits, split_in, split_out,
-                                 *std::next(it_in_before));
+                                 customer);
 
             erased = route_in.erase(std::next(it_in_before));
 
@@ -415,14 +423,14 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
                 lists.pr_relocate.emplace(customer);
 #endif
                 best_ever_value = std::min(best_ever_value, cost_after);
-                sln.route_splits[r_in] = std::move(split_in);
-                sln.route_splits[r_out] = std::move(split_out);
                 improved = true;
                 break;
             } else {
                 // move is bad - roll back the changes
                 route_in.insert(erased, customer);
                 route_out.erase(inserted);
+                transfer_split_entry(m_enable_splits, split_out, split_in,
+                                     customer);
             }
         }
     }
@@ -497,11 +505,10 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists) {
         // we assume there's a suitable vehicle at this point
         auto& route_in = sln.routes[r_in].second;
 
-        SplitInfo split_in = sln.route_splits[r_in];
-        SplitInfo split_out = {};
-        if (!m_enable_splits) {
-            split_out = split_in;
-        }
+        sln.route_splits.emplace_back(m_default_split_info);
+        SplitInfo& split_in = sln.route_splits[r_in];
+        SplitInfo& split_out = sln.route_splits.back();
+
         // skip split customers
         if (is_split(split_in, customer)) {
             continue;
@@ -515,8 +522,7 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists) {
             distance_on_route(m_prob, split_in, m_tw_penalty, it_in_before,
                               std::next(it_in_after));
 
-        transfer_split_entry(m_enable_splits, split_in, split_out,
-                             *std::next(it_in_before));
+        transfer_split_entry(m_enable_splits, split_in, split_out, customer);
 
         auto erased = route_in.erase(std::next(it_in_before));
 
@@ -541,14 +547,15 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists) {
             lists.pr_relocate_new_route.emplace(customer);
 #endif
             best_ever_value = cost_after;
-            sln.route_splits[r_in] = split_in;
-            sln.route_splits.emplace_back(std::move(split_out));
             improved = true;
         } else {
             // move is bad - roll back the changes
             route_in.insert(erased, customer);
             sln.routes.pop_back();
             unused_vehicles.emplace(used_vehicle);
+            transfer_split_entry(m_enable_splits, split_out, split_in,
+                                 customer);
+            sln.route_splits.pop_back();
         }
     }
     delete_loops_after_relocate(sln, lists);
@@ -586,6 +593,11 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
         if (is_loop(route1)) {
             continue;
         }
+        SplitInfo& split1 = sln.route_splits[r1];
+        // skip split customers
+        if (is_split(split1, customer)) {
+            continue;
+        }
         for (size_t neighbour : ascending_sort_customers) {
             if (customer == neighbour) {
                 continue;
@@ -610,10 +622,9 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
                 continue;
             }
 
-            SplitInfo split1 = sln.route_splits[r1];
-            SplitInfo split2 = sln.route_splits[r2];
+            SplitInfo& split2 = sln.route_splits[r2];
             // skip split customers
-            if (is_split(split1, customer) || is_split(split2, neighbour)) {
+            if (is_split(split2, neighbour)) {
                 continue;
             }
 
@@ -631,10 +642,10 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
             auto demand_it1 = m_prob.customers[*it1].demand,
                  demand_it2 = m_prob.customers[*it2].demand;
 
-            transfer_split_entry(m_enable_splits, split1, split2, *it1);
-            transfer_split_entry(m_enable_splits, split2, split1, *it2);
-
             std::swap(*it1, *it2);
+
+            transfer_split_entry(m_enable_splits, split1, split2, customer);
+            transfer_split_entry(m_enable_splits, split2, split1, neighbour);
 
             const auto cost_after = paired_distance_on_route(
                 m_prob, split1, split2, m_tw_penalty, it1, it2);
@@ -677,13 +688,14 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
                 lists.pr_exchange.emplace(neighbour);
 #endif
                 best_ever_value = std::min(best_ever_value, cost_after);
-                sln.route_splits[r1] = std::move(split1);
-                sln.route_splits[r2] = std::move(split2);
                 improved = true;
                 break;
             } else {
                 // move is bad - roll back the changes
                 std::swap(*it1, *it2);
+                transfer_split_entry(m_enable_splits, split2, split1, customer);
+                transfer_split_entry(m_enable_splits, split1, split2,
+                                     neighbour);
             }
         }
     }
@@ -777,6 +789,11 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
         if (is_loop(route1)) {
             continue;
         }
+        SplitInfo& split1 = sln.route_splits[r1];
+        // skip split customers
+        if (is_split(split1, customer)) {
+            continue;
+        }
         for (size_t neighbour = 1; neighbour < size; ++neighbour) {
             if (customer == neighbour) {
                 continue;
@@ -801,10 +818,9 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
                 continue;
             }
 
-            SplitInfo split1 = sln.route_splits[r1];
-            SplitInfo split2 = sln.route_splits[r2];
+            SplitInfo& split2 = sln.route_splits[r2];
             // skip split customers
-            if (is_split(split1, customer) || is_split(split2, neighbour)) {
+            if (is_split(split2, neighbour)) {
                 continue;
             }
 
@@ -825,10 +841,13 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
                        demand2_before = total_demand(
                            m_prob, split2, route2.cbegin(), route2.cend());
 
+            // TODO: optimize
+            std::vector<size_t> customers1(std::next(it1), route1.end());
+            std::vector<size_t> customers2(std::next(it2), route2.end());
             transfer_split_entry(m_enable_splits, split1, split2,
-                                 std::next(it1), route1.end());
+                                 customers1.cbegin(), customers1.cend());
             transfer_split_entry(m_enable_splits, split2, split1,
-                                 std::next(it2), route2.end());
+                                 customers2.cbegin(), customers2.cend());
 
             cross_routes(route1, std::next(it1), route2, std::next(it2));
 
@@ -879,12 +898,14 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
                 lists.pr_cross.emplace(*it2);
 #endif
                 best_ever_value = std::min(best_ever_value, cost_after);
-                sln.route_splits[r1] = std::move(split1);
-                sln.route_splits[r2] = std::move(split2);
                 improved = true;
                 break;
             } else {
                 // move is bad - roll back the changes
+                transfer_split_entry(m_enable_splits, split2, split1,
+                                     customers1.cbegin(), customers1.cend());
+                transfer_split_entry(m_enable_splits, split1, split2,
+                                     customers2.cbegin(), customers2.cend());
                 cross_routes(route1, std::next(it1), route2, std::next(it2));
             }
         }
@@ -933,6 +954,12 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
                 break;
             }
 
+            SplitInfo& split_in = sln.route_splits[r_in];
+            // skip split customers
+            if (is_split(split_in, customer)) {
+                continue;
+            }
+
             for (size_t neighbour = 1; neighbour < size; ++neighbour) {
                 if (customer == neighbour) {
                     continue;
@@ -955,11 +982,9 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
                     continue;
                 }
 
-                SplitInfo split_in = sln.route_splits[r_in];
-                SplitInfo split_out = sln.route_splits[r_out];
+                SplitInfo& split_out = sln.route_splits[r_out];
                 // skip split customers
-                if (is_split(split_in, customer) ||
-                    is_split(split_out, neighbour)) {
+                if (is_split(split_out, neighbour)) {
                     continue;
                 }
 
@@ -1007,7 +1032,7 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
                 }
 
                 transfer_split_entry(m_enable_splits, split_in, split_out,
-                                     *std::next(it_in_before));
+                                     customer);
 
                 erased = route_in.erase(std::next(it_in_before));
 
@@ -1037,13 +1062,13 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
                     // move is good
                     sln.update_customer_owners(m_prob, r_in);
                     sln.update_customer_owners(m_prob, r_out);
-                    sln.route_splits[r_in] = std::move(split_in);
-                    sln.route_splits[r_out] = std::move(split_out);
                     break;
                 } else {
                     // move is bad - roll back the changes
                     route_in.insert(erased, customer);
                     route_out.erase(inserted);
+                    transfer_split_entry(m_enable_splits, split_out, split_in,
+                                         customer);
                 }
             }
         }

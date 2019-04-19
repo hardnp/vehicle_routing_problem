@@ -19,6 +19,7 @@ class LocalSearchMethods {
     double m_tw_penalty = 0.0;      ///< penalty for time windows violation
     bool m_can_violate_tw = false;  ///< flag to specify if TW can be violated
     bool m_enable_splits = false;   ///< flag to enable split delivery
+    SplitInfo m_default_split_info = {};  ///< default split info
 
     bool m_explore_all_neighbourhoods =
         false;  ///< explore all solution, do not use "first improvement"
