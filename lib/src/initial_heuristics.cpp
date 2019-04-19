@@ -4,18 +4,39 @@
 #include "src/internal/savings.h"
 
 namespace vrp {
+namespace {
+// TODO: fix this somehow later - this introduces quite an overhead
+std::vector<Solution> fill_splits(const Problem& prob,
+                                  std::vector<Solution>&& slns) {
+    // do nothing if splits are enabled
+    if (prob.enable_splits()) {
+        return slns;
+    }
+
+    SplitInfo full_info = {};
+    for (size_t c = 0, size = prob.n_customers(); c < size; ++c) {
+        full_info.split_info[c] = 1.0;
+    }
+    for (auto& sln : slns) {
+        sln.route_splits.resize(sln.routes.size(), full_info);
+    }
+    return slns;
+}
+}  // namespace
+
 std::vector<Solution> create_initial_solutions(const Problem& prob,
                                                InitialHeuristic heuristic,
                                                size_t count) {
     switch (heuristic) {
     case InitialHeuristic::Savings:
-        return detail::savings(prob, count);
+        return fill_splits(prob, detail::savings(prob, count));
     case InitialHeuristic::Insertion:
         return {};
     case InitialHeuristic::ParallelInsertion:
         return {};
     case InitialHeuristic::ClusterFirstRouteSecond:
-        return detail::cluster_first_route_second(prob, count);
+        return fill_splits(prob,
+                           detail::cluster_first_route_second(prob, count));
     default:
         return {};
     }

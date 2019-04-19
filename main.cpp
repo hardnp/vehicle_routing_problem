@@ -82,13 +82,20 @@ int main(int argc, char* argv[]) {
     FileHandler input(argv[1]);
     auto problem = parser.read(input.get());
 
+    std::vector<vrp::InitialHeuristic> initial_heuristics = {
+        vrp::InitialHeuristic::Savings, vrp::InitialHeuristic::Insertion,
+        vrp::InitialHeuristic::ParallelInsertion,
+        vrp::InitialHeuristic::ClusterFirstRouteSecond};
+
+    // only use initial heuristics that solve split delivery problem
+    if (problem.enable_splits()) {
+        initial_heuristics = {vrp::InitialHeuristic::ClusterFirstRouteSecond};
+    }
+
     std::vector<vrp::Solution> solutions = {};
-    for (int8_t heuristic = static_cast<int8_t>(vrp::InitialHeuristic::Savings);
-         heuristic < static_cast<int8_t>(vrp::InitialHeuristic::Last);
-         ++heuristic) {
+    for (auto heuristic : initial_heuristics) {
         auto heuristic_solutions = vrp::create_initial_solutions(
-            problem, static_cast<vrp::InitialHeuristic>(heuristic),
-            INITIAL_SLN_COUNT);
+            problem, heuristic, INITIAL_SLN_COUNT);
         solutions.insert(solutions.end(),
                          std::make_move_iterator(heuristic_solutions.begin()),
                          std::make_move_iterator(heuristic_solutions.end()));
@@ -116,22 +123,22 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    std::vector<vrp::Solution> constrained_solutions;
-    constrained_solutions.reserve(solutions.size());
+    std::vector<vrp::Solution> feasible_solutions;
+    feasible_solutions.reserve(solutions.size());
     for (const auto& sln : improved_solutions) {
         if (!vrp::constraints::satisfies_all(problem, sln)) {
             continue;
         }
-        constrained_solutions.emplace_back(sln);
+        feasible_solutions.emplace_back(sln);
     }
     // if there are no solutions that satisfy constraints, choose between all
     // found
-    if (constrained_solutions.empty()) {
-        constrained_solutions = improved_solutions;
+    if (feasible_solutions.empty()) {
+        feasible_solutions = improved_solutions;
     }
 
     auto best_sln = *std::min_element(
-        constrained_solutions.cbegin(), constrained_solutions.cend(),
+        feasible_solutions.cbegin(), feasible_solutions.cend(),
         [&problem](const auto& a, const auto& b) {
             return objective(problem, a) < objective(problem, b);
         });

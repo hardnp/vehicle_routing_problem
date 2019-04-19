@@ -753,8 +753,13 @@ solve_vrp(const Heuristic& h, bool random = false) {
                         updated_route.insert(std::next(updated_route.cbegin(),
                                                        std::get<2>(*optimal)),
                                              std::get<0>(*optimal));
+                        SplitInfo info = {};
+                        for (size_t c : updated_route) {
+                            info.split_info[c] =
+                                customer_splits[c].split_info[t];
+                        }
                         if (constraints::total_violated_time(
-                                prob, updated_route.cbegin(),
+                                prob, info, updated_route.cbegin(),
                                 updated_route.cend()) == 0) {
                             break;
                         }
@@ -786,7 +791,7 @@ solve_vrp(const Heuristic& h, bool random = false) {
         }
     }
 
-    assert(splits_by_vehicles.size() == customer_splits.size());
+    assert(splits_by_vehicles.size() == customer_splits.size() - 1);
 
     // return only real routes (if route consists of <= 2 nodes, it's actually
     // empty - "size 2" stands for in-depot and out-depot)
@@ -830,12 +835,24 @@ Solution routes_to_sln(
         }
     }
 
+    // if split delivery is disabled, do not set split info
+    if (!prob.enable_splits()) {
+        return sln;
+    }
+
     assert(splits_by_routes.size() == split_by_vehicles.size());
 
-    sln.customer_splits.resize(prob.n_customers());
+    // transform <customer: SplitInfo{route, ratio}> into
+    // <route: SplitInfo{customer, ratio}>
+    SplitInfo depot_info = {};
+    depot_info.split_info[0] = 1.0;
+    sln.route_splits.resize(sln.routes.size(), depot_info);
     for (const auto& customer_and_splits : splits_by_routes) {
-        sln.customer_splits[customer_and_splits.first] =
-            customer_and_splits.second;
+        auto c = customer_and_splits.first;
+        const auto& info = customer_and_splits.second;
+        for (const auto& e : info.split_info) {
+            sln.route_splits[e.first].split_info[c] = e.second;
+        }
     }
 
     return sln;

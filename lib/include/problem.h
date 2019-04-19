@@ -182,5 +182,7 @@ public:
     inline const std::vector<VehicleType> vehicle_types() const {
         return m_vehicle_types;
     }
+    /// Get status of split delivery
+    inline bool enable_splits() const { return max_splits > 1; }
 };
 }  // namespace vrp

@@ -3,6 +3,35 @@
 #include <cassert>
 
 namespace vrp {
+void transfer_split_entry(bool enable_splits, SplitInfo& src, SplitInfo& dst,
+                          size_t key) {
+    // do nothing if splits are disabled
+    if (!enable_splits) {
+        return;
+    }
+
+    auto& src_info = src.split_info;
+    auto& dst_info = dst.split_info;
+
+    // do nothing for depot case
+    static constexpr const size_t depot = 0;
+    if (key == depot) {
+        return;
+    }
+
+    // the key shouldn't exist in dst
+    if (dst_info.cend() != dst_info.find(key)) {
+        throw std::runtime_error("given key exists in dst already");
+    }
+
+    auto src_it = src_info.find(key);
+    if (src_info.cend() == src_it) {
+        throw std::out_of_range("given key is not in src");
+    }
+    dst_info.emplace(src_it->first, src_it->second);
+    src_info.erase(src_it);
+}
+
 void Solution::update_times(const Problem& prob) {
     this->times.clear();
 
