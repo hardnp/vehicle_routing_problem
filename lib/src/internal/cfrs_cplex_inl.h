@@ -499,7 +499,7 @@ std::vector<double> fix_ratios(const TransportationQuantity& demand,
     // align ratios
     double sum = 0.0;
     for (auto& p : ratio_map) {
-        if (p == *min) {
+        if (p.first == min->first) {
             continue;
         }
         p.second = closest(aligned_ratios, p.second);
@@ -507,6 +507,21 @@ std::vector<double> fix_ratios(const TransportationQuantity& demand,
     }
     min->second = 1.0 - sum;  // min value is guaranteed to be aligned, because
                               // other values are already aligned
+
+    {
+        // if one of the elements becomes 1.0, fix all other values to be 0.0
+        auto found_one =
+            std::find_if(ratio_map.cbegin(), ratio_map.cend(),
+                         [](const auto& p) { return p.second == 1.0; });
+        if (found_one != ratio_map.cend()) {
+            for (auto& p : ratio_map) {
+                if (p.first == found_one->first) {
+                    continue;
+                }
+                p.second = 0.0;
+            }
+        }
+    }
 
     // construct result
     std::vector<double> fixed_ratios(ratios.size(), 0.0);
