@@ -54,7 +54,7 @@ class Heuristic;
 
 std::unordered_map<size_t, std::vector<size_t>> select_seeds(const Heuristic&);
 
-constexpr const int M = std::numeric_limits<int>::max() / 2;  // big value
+constexpr const double SPLIT_THR = 0.25;
 
 /// Heuristic class that solves the relaxed 0-1 Integer Problem
 class Heuristic {
@@ -295,7 +295,8 @@ public:
                 assert(m_x[i].getSize() == m_y[i].getSize());
                 for (int t = 0; t < m_x[i].getSize(); ++t) {
                     limit_constraints1.add(m_y[i][t] >= m_x[i][t]);
-                    limit_constraints2.add(m_y[i][t] <= M * m_x[i][t]);
+                    limit_constraints2.add(m_y[i][t] <=
+                                           m_x[i][t] + (1.0 - SPLIT_THR));
                 }
             }
             m_model.add(limit_constraints1);
@@ -351,11 +352,10 @@ public:
         auto assignment_map = this->get_values();
         std::unordered_map<size_t, size_t> mapped_types;
         for (size_t c = 0; c < assignment_map.size(); ++c) {
-            const auto& type_ratios = assignment_map[c];
+            const auto& ratios = assignment_map[c];
             // TODO: fix this for split case or leave as is?
-            auto chosen_type =
-                std::max_element(type_ratios.cbegin(), type_ratios.cend());
-            size_t t = std::distance(type_ratios.cbegin(), chosen_type);
+            auto chosen_type = std::max_element(ratios.cbegin(), ratios.cend());
+            size_t t = std::distance(ratios.cbegin(), chosen_type);
             mapped_types[c + depot_offset] = t;
         }
         return mapped_types;
@@ -435,27 +435,13 @@ std::vector<double> fix_ratios(const TransportationQuantity& demand,
         return ratios;
     }
 
-    // TODO: what is a proper threshold? real ratios can be < 0.25!
-    static constexpr const double split_thr = 0.25;
-
     std::unordered_map<size_t, double> ratio_map;
     ratio_map.reserve(ratios.size());
-    // insert elements > threshold
+    // insert elements > 0.0
     for (size_t t = 0, size = ratios.size(); t < size; ++t) {
         auto r = ratios[t];
-        if (r < split_thr) {
-            continue;
-        }
-        ratio_map[t] = r;
-    }
-    // split elements < threshold between ratios
-    for (size_t t = 0, size = ratios.size(); t < size; ++t) {
-        auto r = ratios[t];
-        if (r >= split_thr) {
-            continue;
-        }
-        for (auto& p : ratio_map) {
-            p.second += r / ratio_map.size();
+        if (r > 0.0) {
+            ratio_map[t] = r;
         }
     }
 
@@ -464,7 +450,7 @@ std::vector<double> fix_ratios(const TransportationQuantity& demand,
     const auto volume = demand.volume;
 
     // construct ratios aligned to demand
-    const int grain_size = static_cast<int>(std::ceil(volume * split_thr));
+    const int grain_size = static_cast<int>(std::ceil(volume * SPLIT_THR));
     std::vector<double> aligned_ratios;
     for (int start = grain_size; start <= volume; ++start) {
         aligned_ratios.emplace_back(static_cast<double>(start) / volume);
@@ -484,7 +470,6 @@ std::vector<double> fix_ratios(const TransportationQuantity& demand,
         if (greater_or_equal == values.cend()) {
             return *std::prev(values.cend());
         }
-#if 0  // TODO: closer value - is it worth it?
         if (greater_or_equal == values.cbegin()) {
             return *greater_or_equal;
         }
@@ -493,10 +478,7 @@ std::vector<double> fix_ratios(const TransportationQuantity& demand,
         // if e is closer to lower, return lower. otherwise, return lower_bound
         if (e - *lower < *greater_or_equal - e) {
             return *lower;
-        } else {
-            return *greater_or_equal;
         }
-#endif
         return *greater_or_equal;
     };
 
@@ -547,14 +529,14 @@ group(const Heuristic& h, size_t depot_offset = 0) {
     std::unordered_map<size_t, std::list<size_t>> routes;
     std::unordered_map<size_t, SplitInfo> splits;
     for (size_t c = 0; c < assignment_map.size(); ++c) {
-        auto types = fix_ratios(h.prob().customers[c + depot_offset].demand,
-                                assignment_map[c]);
-        for (size_t t = 0; t < types.size(); ++t) {
-            if (types[t] == 0.0) {
+        auto ratios = fix_ratios(h.prob().customers[c + depot_offset].demand,
+                                 assignment_map[c]);
+        for (size_t t = 0; t < ratios.size(); ++t) {
+            if (ratios[t] == 0.0) {
                 continue;
             }
             routes[t].emplace_back(c + depot_offset);
-            splits[c + depot_offset].split_info[t] = types[t];
+            splits[c + depot_offset].split_info[t] = ratios[t];
         }
     }
     return std::make_pair(routes, splits);
