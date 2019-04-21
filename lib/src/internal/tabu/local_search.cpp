@@ -148,8 +148,7 @@ void delete_loops_after_relocate(Solution& sln) {
     }
 
     while (!loop_indices.empty()) {
-        auto loop = loop_indices.top();
-        sln.routes.erase(loop);
+        sln.routes.erase(loop_indices.top());
         loop_indices.pop();
     }
 }
@@ -281,6 +280,14 @@ operator[](size_t i) const {
     return m_methods[i];
 }
 
+inline void validate_indices(
+    size_t r_id, size_t c_id,
+    const std::vector<std::pair<Solution::VehicleIndex, Solution::RouteType>>&
+        routes) {
+    assert(r_id < routes.size());
+    assert(c_id < routes[r_id].second.size());
+}
+
 bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
     static double best_ever_value = std::numeric_limits<double>::max();
 
@@ -308,7 +315,8 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
     // small ones are usually "outliers", big ones are "cluster centers"
     for (size_t customer : ascending_sort_customers) {
         size_t r_in = 0, c_index = 0;
-        std::tie(r_in, c_index) = sln.customer_owners[customer];
+        std::tie(r_in, c_index) = *sln.customer_owners[customer].begin();
+        validate_indices(r_in, c_index, sln.routes);
         auto& route_in = sln.routes[r_in].second;
         if (is_loop(route_in)) {
             continue;
@@ -323,7 +331,8 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
             }
 
             size_t r_out = 0, n_index = 0;
-            std::tie(r_out, n_index) = sln.customer_owners[neighbour];
+            std::tie(r_out, n_index) = *sln.customer_owners[neighbour].begin();
+            validate_indices(r_out, n_index, sln.routes);
             // do not relocate inside the same route
             if (r_in == r_out) {
                 continue;
@@ -416,6 +425,7 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
                 // move is good
+                sln.customer_owners[customer].erase(r_in);
                 sln.update_customer_owners(m_prob, r_in, c_index);
                 sln.update_customer_owners(m_prob, r_out, n_index - 1);
                 lists.relocate.emplace(customer, r_in);
@@ -478,7 +488,8 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists) {
     // sorting customers: try to relocate big customers to new routes first
     for (size_t customer : descending_sort_customers) {
         size_t r_in = 0, c_index = 0;
-        std::tie(r_in, c_index) = sln.customer_owners[customer];
+        std::tie(r_in, c_index) = *sln.customer_owners[customer].begin();
+        validate_indices(r_in, c_index, sln.routes);
         if (is_loop(sln.routes[r_in].second)) {
             continue;
         }
@@ -539,6 +550,7 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists) {
         // decide whether move is good
         if (!impossible_move && cost_after < cost_before) {
             // move is good
+            sln.customer_owners[customer].erase(r_in);
             sln.update_customer_owners(m_prob, r_in, c_index);
             sln.update_customer_owners(m_prob, sln.routes.size() - 1);
             sln.used_vehicles.emplace(used_vehicle);
@@ -588,7 +600,8 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
     // sorting customers: try to exchange equal size customers first
     for (size_t customer : ascending_sort_customers) {
         size_t r1 = 0, c_index = 0;
-        std::tie(r1, c_index) = sln.customer_owners[customer];
+        std::tie(r1, c_index) = *sln.customer_owners[customer].begin();
+        validate_indices(r1, c_index, sln.routes);
         auto& route1 = sln.routes[r1].second;
         if (is_loop(route1)) {
             continue;
@@ -604,7 +617,8 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
             }
 
             size_t r2 = 0, n_index = 0;
-            std::tie(r2, n_index) = sln.customer_owners[neighbour];
+            std::tie(r2, n_index) = *sln.customer_owners[neighbour].begin();
+            validate_indices(r2, n_index, sln.routes);
             // do not relocate inside the same route
             if (r1 == r2) {
                 continue;
@@ -679,8 +693,10 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
                 // move is good
-                sln.customer_owners[customer] = std::make_pair(r2, n_index);
-                sln.customer_owners[neighbour] = std::make_pair(r1, c_index);
+                sln.customer_owners[customer].erase(r1);
+                sln.customer_owners[neighbour].erase(r2);
+                sln.customer_owners[customer][r2] = n_index;
+                sln.customer_owners[neighbour][r1] = c_index;
                 lists.exchange.emplace(customer, r1);
                 lists.exchange.emplace(neighbour, r2);
 #if USE_PRESERVE_ENTRIES
@@ -784,7 +800,8 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
     const auto size = m_prob.n_customers();
     for (size_t customer = 1; customer < size; ++customer) {
         size_t r1 = 0, c_index = 0;
-        std::tie(r1, c_index) = sln.customer_owners[customer];
+        std::tie(r1, c_index) = *sln.customer_owners[customer].begin();
+        validate_indices(r1, c_index, sln.routes);
         auto& route1 = sln.routes[r1].second;
         if (is_loop(route1)) {
             continue;
@@ -800,7 +817,8 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
             }
 
             size_t r2 = 0, n_index = 0;
-            std::tie(r2, n_index) = sln.customer_owners[neighbour];
+            std::tie(r2, n_index) = *sln.customer_owners[neighbour].begin();
+            validate_indices(r2, n_index, sln.routes);
             // do not relocate inside the same route
             if (r1 == r2) {
                 continue;
@@ -889,6 +907,12 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
                 // move is good
+                for (size_t c1 : customers1) {
+                    sln.customer_owners[c1].erase(r1);
+                }
+                for (size_t c2 : customers2) {
+                    sln.customer_owners[c2].erase(r2);
+                }
                 sln.update_customer_owners(m_prob, r1, c_index);
                 sln.update_customer_owners(m_prob, r2, n_index);
                 lists.cross.emplace(*it1, c_next1);
@@ -946,8 +970,9 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
             size_t customer = *std::next(route_in.cbegin());
 
             size_t _ = 0, c_index = 0;
-            std::tie(_, c_index) = sln.customer_owners[customer];
+            std::tie(_, c_index) = *sln.customer_owners[customer].begin();
             assert(_ == r_in);
+            validate_indices(r_in, c_index, sln.routes);
             // check if current route (where customer was relocated) is small,
             // if not anymore, skip
             if (_ == r_in && route_in.size() > threshold) {
@@ -966,7 +991,9 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
                 }
 
                 size_t r_out = 0, n_index = 0;
-                std::tie(r_out, n_index) = sln.customer_owners[neighbour];
+                std::tie(r_out, n_index) =
+                    *sln.customer_owners[neighbour].begin();
+                validate_indices(r_out, n_index, sln.routes);
                 // do not relocate inside the same route
                 if (r_in == r_out) {
                     continue;
@@ -1060,6 +1087,7 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
                 // decide whether move is good
                 if (!impossible_move && cost_after < cost_before) {
                     // move is good
+                    sln.customer_owners[customer].erase(r_in);
                     sln.update_customer_owners(m_prob, r_in, c_index);
                     sln.update_customer_owners(m_prob, r_out, n_index - 1);
                     break;

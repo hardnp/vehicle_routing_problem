@@ -73,10 +73,11 @@ void Solution::update_times(const Problem& prob) {
 
 void Solution::update_customer_owners(const Problem& prob) {
     customer_owners.resize(prob.n_customers());  // TODO: free on same size?
+    const auto empty_hash_map = std::unordered_map<size_t, size_t>{};
+    std::fill(customer_owners.begin(), customer_owners.end(), empty_hash_map);
 
     const auto size = routes.size();
     for (size_t ri = 0; ri < size; ++ri) {
-        delete_customer_owners(prob, ri);  // TODO: is this necessary?
         update_customer_owners(prob, ri);
     }
 }
@@ -89,20 +90,13 @@ void Solution::update_customer_owners(const Problem& prob, size_t route_index,
     const auto& route = routes[route_index].second;
     auto first = std::next(route.cbegin(), first_customer_index);
     for (size_t i = first_customer_index; first != route.cend(); ++first, ++i) {
-        // customer_owners[*first][route_index] = i;
-        customer_owners[*first] = std::make_pair(route_index, i);
-    }
-}
-
-void Solution::delete_customer_owners(const Problem& prob, size_t route_index,
-                                      size_t first_customer_index) {
-    // expect allocated at this point
-    assert(customer_owners.size() == prob.n_customers());
-
-    const auto& route = routes[route_index].second;
-    auto first = std::next(route.cbegin(), first_customer_index);
-    for (size_t i = first_customer_index; first != route.cend(); ++first, ++i) {
-        // customer_owners[*first].erase(route_index);
+        // skip depot
+        if (*first == 0) {
+            continue;
+        }
+        customer_owners[*first][route_index] = i;
+        assert(customer_owners[*first].size() <=
+               static_cast<size_t>(prob.max_splits));
     }
 }
 
