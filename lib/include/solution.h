@@ -24,9 +24,11 @@ struct SplitInfo {
     };
     std::unordered_map<size_t, Ratio> split_info;  ///< index mapped to ratio
     inline bool has(size_t i) const noexcept {
-        return split_info.cend() !=
-               std::find_if(split_info.cbegin(), split_info.cend(),
-                            [i](const auto& p) { return p.first == i; });
+        return split_info.cend() != split_info.find(i);
+    }
+    inline bool has_any(const std::vector<size_t>& is) const noexcept {
+        return std::any_of(is.cbegin(), is.cend(),
+                           [this](size_t i) { return has(i); });
     }
     inline const Ratio& at(size_t i) const { return split_info.at(i); }
     inline bool empty() const noexcept { return split_info.empty(); }

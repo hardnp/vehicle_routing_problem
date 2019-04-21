@@ -10,9 +10,6 @@ void transfer_split_entry(bool enable_splits, SplitInfo& src, SplitInfo& dst,
         return;
     }
 
-    auto& src_info = src.split_info;
-    auto& dst_info = dst.split_info;
-
     // do nothing for depot case
     static constexpr const size_t depot = 0;
     if (key == depot) {
@@ -20,9 +17,12 @@ void transfer_split_entry(bool enable_splits, SplitInfo& src, SplitInfo& dst,
     }
 
     // the key shouldn't exist in dst
-    if (dst_info.cend() != dst_info.find(key)) {
+    if (dst.has(key)) {
         throw std::runtime_error("given key exists in dst already");
     }
+
+    auto& src_info = src.split_info;
+    auto& dst_info = dst.split_info;
 
     auto src_it = src_info.find(key);
     if (src_info.cend() == src_it) {
