@@ -282,6 +282,10 @@ public:
         }
 
         {
+            if (!prob.enable_splits()) {
+                return;
+            }
+
             // split delivery constraints
             IloConstraintArray limit_constraints1(m_env),
                 limit_constraints2(m_env);

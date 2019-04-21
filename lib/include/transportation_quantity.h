@@ -97,8 +97,8 @@ public:
 
     inline TransportationQuantity operator*(double v) const noexcept {
         return TransportationQuantity{
-            static_cast<int>(std::round(v * this->volume)),
-            static_cast<int>(std::round(v * this->weight))};
+            static_cast<int>(std::ceil(v * this->volume)),
+            static_cast<int>(std::ceil(v * this->weight))};
     }
 
     inline bool operator==(int v) const noexcept {

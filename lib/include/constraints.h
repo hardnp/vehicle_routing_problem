@@ -4,6 +4,7 @@
 #include "solution.h"
 
 #include <cassert>
+#include <cmath>
 
 namespace vrp {
 namespace constraints {
@@ -23,7 +24,7 @@ inline int total_violated_time(const Problem& prob, const SplitInfo& info,
     // TODO: is round() good enough here?
     const auto service_time = [&info](const Customer& c) -> int {
         // TODO: unordered_map::at() is sufficient?
-        return static_cast<int>(std::round(info.at(c.id) * c.service_time));
+        return static_cast<int>(std::ceil(info.at(c.id) * c.service_time));
     };
 
     int violated_time = 0;
