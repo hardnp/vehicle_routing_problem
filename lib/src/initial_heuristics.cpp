@@ -7,9 +7,8 @@ namespace vrp {
 namespace {
 // TODO: fix this somehow later - this introduces quite an overhead
 std::vector<Solution> fill_splits(const Problem& prob,
-                                  std::vector<Solution>&& slns) {
-    // do nothing if splits are enabled
-    if (prob.enable_splits()) {
+                                  std::vector<Solution>&& slns, bool fill) {
+    if (!fill) {
         return slns;
     }
 
@@ -27,16 +26,18 @@ std::vector<Solution> fill_splits(const Problem& prob,
 std::vector<Solution> create_initial_solutions(const Problem& prob,
                                                InitialHeuristic heuristic,
                                                size_t count) {
+    const bool fill_with_default = !prob.enable_splits();
     switch (heuristic) {
     case InitialHeuristic::Savings:
-        return fill_splits(prob, detail::savings(prob, count));
+        return fill_splits(prob, detail::savings(prob, count), true);
     case InitialHeuristic::Insertion:
         return {};
     case InitialHeuristic::ParallelInsertion:
         return {};
     case InitialHeuristic::ClusterFirstRouteSecond:
         return fill_splits(prob,
-                           detail::cluster_first_route_second(prob, count));
+                           detail::cluster_first_route_second(prob, count),
+                           fill_with_default);
     default:
         return {};
     }

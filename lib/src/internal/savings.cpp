@@ -1,4 +1,6 @@
 #include "savings.h"
+#include "logging.h"
+
 #include <algorithm>
 #include <array>
 #include <ctime>
@@ -18,7 +20,7 @@ namespace detail {
 
 std::vector<Solution> savings(const Problem& prob, size_t count) {
     std::vector<Solution> solutions;
-    std::srand(5489u);
+    std::srand(1555876069u);
 
     for (size_t it = 0; it < count; ++it) {
         const auto cust_size = prob.customers.size() - 1;
