@@ -416,8 +416,8 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
                 // move is good
-                sln.update_customer_owners(m_prob, r_in);
-                sln.update_customer_owners(m_prob, r_out);
+                sln.update_customer_owners(m_prob, r_in, c_index);
+                sln.update_customer_owners(m_prob, r_out, n_index - 1);
                 lists.relocate.emplace(customer, r_in);
 #if USE_PRESERVE_ENTRIES
                 lists.pr_relocate.emplace(customer);
@@ -539,7 +539,7 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists) {
         // decide whether move is good
         if (!impossible_move && cost_after < cost_before) {
             // move is good
-            sln.update_customer_owners(m_prob, r_in);
+            sln.update_customer_owners(m_prob, r_in, c_index);
             sln.update_customer_owners(m_prob, sln.routes.size() - 1);
             sln.used_vehicles.emplace(used_vehicle);
             lists.relocate_new_route.emplace(customer, r_in);
@@ -679,8 +679,8 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
                 // move is good
-                sln.update_customer_owners(m_prob, r1);
-                sln.update_customer_owners(m_prob, r2);
+                sln.customer_owners[customer] = std::make_pair(r2, n_index);
+                sln.customer_owners[neighbour] = std::make_pair(r1, c_index);
                 lists.exchange.emplace(customer, r1);
                 lists.exchange.emplace(neighbour, r2);
 #if USE_PRESERVE_ENTRIES
@@ -889,8 +889,8 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
                 // move is good
-                sln.update_customer_owners(m_prob, r1);
-                sln.update_customer_owners(m_prob, r2);
+                sln.update_customer_owners(m_prob, r1, c_index);
+                sln.update_customer_owners(m_prob, r2, n_index);
                 lists.cross.emplace(*it1, c_next1);
                 lists.cross.emplace(*it2, c_next2);
 #if USE_PRESERVE_ENTRIES
@@ -1060,8 +1060,8 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
                 // decide whether move is good
                 if (!impossible_move && cost_after < cost_before) {
                     // move is good
-                    sln.update_customer_owners(m_prob, r_in);
-                    sln.update_customer_owners(m_prob, r_out);
+                    sln.update_customer_owners(m_prob, r_in, c_index);
+                    sln.update_customer_owners(m_prob, r_out, n_index - 1);
                     break;
                 } else {
                     // move is bad - roll back the changes

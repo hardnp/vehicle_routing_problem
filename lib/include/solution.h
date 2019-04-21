@@ -57,8 +57,9 @@ public:
 
     std::vector<std::pair<VehicleIndex, std::list<RoutePointTime>>> times;
 
-    std::vector<std::pair<size_t, size_t>>
-        customer_owners;  ///< specifies which route
+    std::vector<
+        std::pair<size_t, size_t>>  // std::unordered_map<size_t, size_t>>
+        customer_owners;            ///< specifies which route
                           ///< each customer belongs to and what index customer
                           ///< has
 
@@ -73,6 +74,8 @@ public:
 
     void update_customer_owners(const Problem& prob);
     void update_customer_owners(const Problem& prob, size_t route_index,
+                                size_t first_customer_index = 0);
+    void delete_customer_owners(const Problem& prob, size_t route_index,
                                 size_t first_customer_index = 0);
 
     void update_used_vehicles();

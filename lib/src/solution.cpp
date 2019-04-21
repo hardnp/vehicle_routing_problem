@@ -76,21 +76,33 @@ void Solution::update_customer_owners(const Problem& prob) {
 
     const auto size = routes.size();
     for (size_t ri = 0; ri < size; ++ri) {
+        delete_customer_owners(prob, ri);  // TODO: is this necessary?
         update_customer_owners(prob, ri);
     }
 }
 
-// FIXME: use last parameter
 void Solution::update_customer_owners(const Problem& prob, size_t route_index,
-                                      size_t) {
+                                      size_t first_customer_index) {
     // expect allocated at this point
     assert(customer_owners.size() == prob.n_customers());
 
     const auto& route = routes[route_index].second;
-    size_t i = 0;
-    for (CustomerIndex customer : route) {
-        customer_owners[customer] = std::make_pair(route_index, i);
-        ++i;
+    auto first = std::next(route.cbegin(), first_customer_index);
+    for (size_t i = first_customer_index; first != route.cend(); ++first, ++i) {
+        // customer_owners[*first][route_index] = i;
+        customer_owners[*first] = std::make_pair(route_index, i);
+    }
+}
+
+void Solution::delete_customer_owners(const Problem& prob, size_t route_index,
+                                      size_t first_customer_index) {
+    // expect allocated at this point
+    assert(customer_owners.size() == prob.n_customers());
+
+    const auto& route = routes[route_index].second;
+    auto first = std::next(route.cbegin(), first_customer_index);
+    for (size_t i = first_customer_index; first != route.cend(); ++first, ++i) {
+        // customer_owners[*first].erase(route_index);
     }
 }
 

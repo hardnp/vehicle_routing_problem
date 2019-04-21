@@ -18,7 +18,7 @@ namespace detail {
 
 std::vector<Solution> savings(const Problem& prob, size_t count) {
     std::vector<Solution> solutions;
-    std::srand((unsigned int)time(0));
+    std::srand(5489u);
 
     for (size_t it = 0; it < count; ++it) {
         const auto cust_size = prob.customers.size() - 1;
