@@ -33,13 +33,13 @@ int total(AttribAccessor accessor, const std::vector<Vehicle>& vehicles,
                            });
 }
 
-/// Cost of assigning customer i to vehicle t. Single vehicle in type case.
+/// Cost of assigning customer i to seed
 inline double assignment_cost(const Problem& prob, size_t seed, size_t i) {
     const auto& c = prob.costs;
     return c[0][i] + c[i][seed] - c[0][seed];
 }
 
-/// Cost of assigning customer i to vehicle t. General case.
+/// Min of costs of assigning customer i to each seed in seeds
 double assignment_cost(const Problem& prob, const std::vector<size_t>& seeds,
                        size_t i) {
     const auto size = seeds.size();
@@ -62,7 +62,7 @@ class Heuristic {
 
     IloEnv m_env;
     std::vector<IloNumVarArray> m_x;  ///< x[i][t]: 1 if customer i is assigned
-                                      /// to vehicle t. index is customer
+                                      /// to type t. index is customer
     std::vector<IloIntVarArray> m_y;  ///< y[i][t]: internal value that forces
                                       ///< x[i][t] to be an integer or float
     IloModel m_model = IloModel(m_env);
@@ -78,12 +78,12 @@ class Heuristic {
         m_model.add(IloConstraint(zero_expr == 0));
     }
 
-    /// Cost of assigning customer i to vehicle t. Single vehicle in type case.
+    /// Cost of assigning customer i to seed s
     inline double assignment_cost(size_t seed, size_t i) {
         return ::vrp::detail::assignment_cost(m_prob, seed, i);
     }
 
-    /// Cost of assigning customer i to vehicle t. General case.
+    /// Min of costs of assigning customer i to each seed in seeds
     inline double assignment_cost(const std::vector<size_t>& seeds, size_t i) {
         return ::vrp::detail::assignment_cost(m_prob, seeds, i);
     }
@@ -347,8 +347,7 @@ public:
     }
 
     /// Get mapping between customer and vehicle type for current solution
-    std::unordered_map<size_t, size_t>
-    get_customer_types(size_t depot_offset = 0) {
+    std::unordered_map<size_t, size_t> get_customer_types(size_t depot_offset) {
         auto assignment_map = this->get_values();
         std::unordered_map<size_t, size_t> mapped_types;
         for (size_t c = 0; c < assignment_map.size(); ++c) {
@@ -364,7 +363,7 @@ public:
     void update() {
         auto seeds = select_seeds(*this);
         const auto n_customers = m_prob.n_customers();
-        auto customer_to_type = this->get_customer_types();
+        auto customer_to_type = this->get_customer_types(1);
 
         // (9) calculate total minimal insertion cost
         double total_distance = 0.0;
@@ -373,7 +372,7 @@ public:
             for (size_t t = 0; t < allowed.size(); ++t) {
                 if (allowed[t]) {
                     total_distance +=
-                        assignment_cost(seeds.at(customer_to_type[t]), k);
+                        assignment_cost(seeds.at(customer_to_type[k]), k);
                 }
             }
         }
@@ -524,7 +523,7 @@ std::vector<double> fix_ratios(const TransportationQuantity& demand,
 /// Get non-constructed groups of customers that belong to the same routes
 std::pair<std::unordered_map<size_t, std::list<size_t>>,
           std::unordered_map<size_t, SplitInfo>>
-group(const Heuristic& h, size_t depot_offset = 0) {
+group(const Heuristic& h, size_t depot_offset) {
     auto assignment_map = h.get_values();
     std::unordered_map<size_t, std::list<size_t>> routes;
     std::unordered_map<size_t, SplitInfo> splits;
