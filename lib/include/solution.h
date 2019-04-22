@@ -21,6 +21,14 @@ struct SplitInfo {
             d = v;
             return *this;
         }
+        inline Ratio& operator+=(const Ratio& other) {
+            d += other.d;
+            return *this;
+        }
+        inline Ratio& operator-=(const Ratio& other) {
+            d -= other.d;
+            return *this;
+        }
     };
     std::unordered_map<size_t, Ratio> split_info;  ///< index mapped to ratio
     inline bool has(size_t i) const noexcept {

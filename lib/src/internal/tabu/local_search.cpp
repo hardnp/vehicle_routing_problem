@@ -227,10 +227,6 @@ inline Solution::RouteType add_depots(const Solution::RouteType& route) {
     copy.emplace_back(depot);
     return copy;
 }
-
-inline bool is_split(const SplitInfo& info, size_t c) {
-    return static_cast<double>(info.at(c)) < 1.0;
-}
 }  // namespace
 
 LocalSearchMethods::LocalSearchMethods(const Problem& prob) noexcept
@@ -1215,6 +1211,105 @@ void LocalSearchMethods::intra_relocate(Solution& sln) {
         }
     }
     sln.update_customer_owners(m_prob);
+}
+
+void LocalSearchMethods::merge_splits(Solution& sln) {
+    if (!m_prob.enable_splits()) {
+        return;
+    }
+
+    std::unordered_set<size_t> split_customers;
+    for (size_t ri = 0, size = sln.route_splits.size(); ri < size; ++ri) {
+        const auto& route_split = sln.route_splits[ri].split_info;
+        for (const auto& p : route_split) {
+            // only store split customers
+            if (p.second > 0.0 && p.second < 1.0) {
+                split_customers.emplace(p.first);
+            }
+        }
+    }
+
+    // "relocate" split customer to another route where this customer already
+    // exists
+    for (size_t customer : split_customers) {
+        bool skip_to_next_customer = false;
+        auto cfirst1 = sln.customer_owners[customer].cbegin(),
+             clast = sln.customer_owners[customer].cend();
+        for (; !skip_to_next_customer && cfirst1 != clast; ++cfirst1) {
+            size_t r_in = 0, c_in = 0;
+            std::tie(r_in, c_in) = *cfirst1;
+            validate_indices(r_in, c_in, sln.routes);
+            auto& route_in = sln.routes[r_in].second;
+            if (is_loop(route_in)) {
+                continue;
+            }
+            SplitInfo& split_in = sln.route_splits[r_in];
+
+            auto cfirst2 = sln.customer_owners[customer].cbegin();
+            for (; !skip_to_next_customer && cfirst2 != clast; ++cfirst2) {
+                if (cfirst1 == cfirst2) {
+                    continue;
+                }
+                size_t r_out = 0, c_out = 0;
+                std::tie(r_out, c_out) = *cfirst2;
+                validate_indices(r_out, c_out, sln.routes);
+                auto& route_out = sln.routes[r_out].second;
+                if (is_loop(route_out)) {
+                    continue;
+                }
+
+                SplitInfo& split_out = sln.route_splits[r_out];
+
+                auto it_in_before = atit(route_in, c_in - 1),
+                     it_in_after = atit(route_in, c_in + 1),
+                     it_out_before = atit(route_out, c_out - 1),
+                     it_out_after = atit(route_out, c_out + 1);
+
+                const auto cost_before =
+                    distance_on_route(m_prob, split_in, m_tw_penalty,
+                                      it_in_before, std::next(it_in_after)) +
+                    distance_on_route(m_prob, split_out, m_tw_penalty,
+                                      it_out_before, std::next(it_out_after));
+
+                auto erased_ratio = split_in.at(customer);
+                split_in.split_info.erase(customer);
+                split_out.split_info.at(customer) += erased_ratio;
+
+                auto erased = route_in.erase(std::next(it_in_before));
+
+                const auto cost_after =
+                    distance_on_route(m_prob, split_in, m_tw_penalty,
+                                      it_in_before, std::next(it_in_after)) +
+                    distance_on_route(m_prob, split_out, m_tw_penalty,
+                                      it_out_before, std::next(it_out_after));
+
+                const auto out_demand_after = total_demand(
+                    m_prob, split_out, route_out.cbegin(), route_out.cend());
+
+                const auto out_capacity =
+                    m_prob.vehicles[sln.routes[r_out].first].capacity;
+                bool impossible_move = (out_demand_after > out_capacity);
+
+                impossible_move |= (!m_can_violate_tw &&
+                                    (constraints::total_violated_time(
+                                         m_prob, split_out, route_out.cbegin(),
+                                         route_out.cend()) != 0));
+
+                // decide whether move is good
+                if (!impossible_move && cost_after < cost_before) {
+                    // move is good
+                    sln.customer_owners[customer].erase(r_in);
+                    sln.update_customer_owners(m_prob, r_in, c_in);
+                    skip_to_next_customer = true;
+                } else {
+                    // move is bad - roll back the changes
+                    split_in.split_info[customer] = erased_ratio;
+                    split_out.split_info.at(customer) -= erased_ratio;
+                    route_in.insert(erased, customer);
+                }
+            }
+        }
+    }
 }
 
 void LocalSearchMethods::penalize_tw(double value) { m_tw_penalty = value; }

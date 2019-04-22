@@ -50,6 +50,7 @@ public:
     // additional heuristics:
     void route_save(Solution& sln, size_t threshold);
     void intra_relocate(Solution& sln);
+    void merge_splits(Solution& sln);
 
     // time windows management:
     void penalize_tw(double value);
