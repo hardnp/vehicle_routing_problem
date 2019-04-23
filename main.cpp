@@ -53,6 +53,15 @@ void print_fmt(double objective, int violated_time,
               << violated_q << EOL;
 }
 
+void deduplicate(const vrp::Problem& prob, std::vector<vrp::Solution>& slns) {
+    std::sort(slns.begin(), slns.end(),
+              [&prob](const auto& a, const auto& b) -> bool {
+                  return objective(prob, a) < objective(prob, b);
+              });
+    auto last = std::unique(slns.begin(), slns.end());
+    slns.erase(last, slns.end());
+}
+
 constexpr const size_t INITIAL_SLN_COUNT = 20;
 
 }  // namespace
@@ -102,8 +111,11 @@ int main(int argc, char* argv[]) {
     }
 
     if (solutions.empty()) {
-        throw std::runtime_error("no solutions found");
+        throw std::runtime_error("no initial solutions were created");
     }
+
+    // delete equal initial solutions
+    deduplicate(problem, solutions);
 
     if (print_debug_info) {
         auto best_initial_sln = *std::min_element(
@@ -115,16 +127,19 @@ int main(int argc, char* argv[]) {
     }
 
     std::vector<vrp::Solution> improved_solutions(solutions.size());
-    vrp::threading::parallel_range(solutions.size(), [&](size_t first,
-                                                         size_t last) {
+    vrp::threading::parallel_range(improved_solutions.size(), [&](size_t first,
+                                                                  size_t last) {
         for (; first != last; ++first) {
             improved_solutions[first] = std::move(create_improved_solution(
                 problem, solutions[first], vrp::ImprovementHeuristic::Tabu));
         }
     });
 
+    // delete equal improved solutions
+    deduplicate(problem, improved_solutions);
+
     std::vector<vrp::Solution> feasible_solutions;
-    feasible_solutions.reserve(solutions.size());
+    feasible_solutions.reserve(improved_solutions.size());
     for (const auto& sln : improved_solutions) {
         if (!vrp::constraints::satisfies_all(problem, sln)) {
             continue;

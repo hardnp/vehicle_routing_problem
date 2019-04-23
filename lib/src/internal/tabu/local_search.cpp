@@ -141,6 +141,33 @@ inline bool is_loop(const Solution::RouteType& route) {
     return *route.cbegin() == *std::next(route.cbegin());
 }
 
+void delete_loops_after_relocate(
+    Solution& sln,
+    std::stack<decltype(sln.routes)::const_iterator> loop_indices) {
+    while (!loop_indices.empty()) {
+        auto loop_index = loop_indices.top();
+
+        // one must update route splits correspondingly to the removed routes
+        const size_t loop_id = std::distance(sln.routes.cbegin(), loop_index);
+        // update routes_splits that are after the loop
+        size_t route_id = loop_id + 1;
+        const size_t size = sln.route_splits.size();
+        std::vector<SplitInfo> route_splits_part(size - route_id);
+        for (; route_id < size; ++route_id) {
+            route_splits_part[route_id - (loop_id + 1)] =
+                std::move(sln.route_splits[route_id]);
+        }
+        sln.route_splits.pop_back();
+        std::copy(std::make_move_iterator(route_splits_part.begin()),
+                  std::make_move_iterator(route_splits_part.end()),
+                  std::next(sln.route_splits.begin(), loop_id));
+
+        // erase loop from routes
+        sln.routes.erase(loop_index);
+        loop_indices.pop();
+    }
+}
+
 void delete_loops_after_relocate(Solution& sln) {
     std::stack<decltype(sln.routes)::const_iterator> loop_indices;
     for (size_t ri = 0, size = sln.routes.size(); ri < size; ++ri) {
@@ -149,10 +176,7 @@ void delete_loops_after_relocate(Solution& sln) {
         }
     }
 
-    while (!loop_indices.empty()) {
-        sln.routes.erase(loop_indices.top());
-        loop_indices.pop();
-    }
+    delete_loops_after_relocate(sln, std::move(loop_indices));
 }
 
 void delete_loops_after_relocate(Solution& sln, TabuLists& lists) {
@@ -195,10 +219,7 @@ void delete_loops_after_relocate(Solution& sln, TabuLists& lists) {
     delete_loops_in_tabu_list(sln, lists.relocate_new_route.all());
     delete_loops_in_tabu_list(sln, lists.relocate_split.all());
 
-    while (!loop_indices.empty()) {
-        sln.routes.erase(loop_indices.top());
-        loop_indices.pop();
-    }
+    delete_loops_after_relocate(sln, std::move(loop_indices));
 }
 
 template<typename ListIt>
@@ -847,7 +868,6 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
             }
         }
     }
-
     delete_loops_after_relocate(sln, lists);
     sln.update_customer_owners(m_prob);
     return improved;
@@ -1284,26 +1304,23 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
         auto r_in = small_routes.front();
         small_routes.pop_front();
         auto& route_in = sln.routes[r_in].second;
+        // check if current route (where customer was relocated) is still
+        // small. if not anymore, skip
+        if (route_in.size() > threshold) {
+            break;
+        }
 
         const size_t max_iters = route_in.size();
         for (size_t iter = 0; iter < max_iters && !is_loop(route_in); ++iter) {
             size_t customer = *std::next(route_in.cbegin());
-
             size_t c_index = sln.customer_owners[customer][r_in];
             validate_indices(r_in, c_index, sln.routes);
-            // check if current route (where customer was relocated) is still
-            // small. if not anymore, skip
-            if (route_in.size() > threshold) {
-                break;
-            }
 
             SplitInfo& split_in = sln.route_splits[r_in];
 
             bool skip_to_next_iter = false;
-            for (size_t neighbour = 1; neighbour < size; ++neighbour) {
-                if (skip_to_next_iter) {
-                    break;
-                }
+            for (size_t neighbour = 1; !skip_to_next_iter && neighbour < size;
+                 ++neighbour) {
                 if (customer == neighbour) {
                     continue;
                 }
@@ -1330,6 +1347,8 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
                     }
 
                     SplitInfo& split_out = sln.route_splits[r_out];
+                    // do not relocate to the route where customer already
+                    // exists
                     if (m_enable_splits && split_out.has(customer)) {
                         continue;
                     }
@@ -1434,7 +1453,6 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
             sln_copy = sln;
         }
     }
-
     sln = std::move(sln_copy);
     delete_loops_after_relocate(sln);
     sln.update_customer_owners(m_prob);
@@ -1576,6 +1594,8 @@ void LocalSearchMethods::merge_splits(Solution& sln) {
             }
         }
     }
+    delete_loops_after_relocate(sln);
+    sln.update_customer_owners(m_prob);
 }
 
 void LocalSearchMethods::penalize_tw(double value) { m_tw_penalty = value; }
