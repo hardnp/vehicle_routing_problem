@@ -125,6 +125,10 @@ inline TransportationQuantity total_demand(const Problem& prob,
     for (; first != last; ++first) {
         const auto& c = customers[*first];
         assert(static_cast<size_t>(c.id) == *first);
+        // skip depot
+        if (c.id == 0) {
+            continue;
+        }
         demand += (c.demand * info.at(c.id));
     }
 
@@ -193,6 +197,7 @@ void delete_loops_after_relocate(Solution& sln, TabuLists& lists) {
 
     delete_loops_in_tabu_list(sln, lists.relocate.all());
     delete_loops_in_tabu_list(sln, lists.relocate_new_route.all());
+    delete_loops_in_tabu_list(sln, lists.relocate_split.all());
 
     while (!loop_indices.empty()) {
         sln.routes.erase(loop_indices.top());
@@ -225,7 +230,8 @@ inline Solution::RouteType add_depots(const Solution::RouteType& route) {
 /// src::iterator and dst::iterator representing two closest nodes from both
 /// routes
 std::pair<Solution::RouteType::iterator, Solution::RouteType::iterator>
-find_closest(const Problem& prob, Solution& sln, size_t src_id, size_t dst_id) {
+find_closest(const Problem& prob, Solution& sln, size_t src_id, size_t dst_id,
+             size_t src_ignored_id) {
     using IterPair =
         std::pair<Solution::RouteType::iterator, Solution::RouteType::iterator>;
     auto& src = sln.routes[src_id].second;
@@ -241,6 +247,9 @@ find_closest(const Problem& prob, Solution& sln, size_t src_id, size_t dst_id) {
     closest_pairs.reserve(std::max(src.size(), dst.size()) - 2);
     for (; src_first != src_end; ++src_first) {
         size_t i = *src_first;
+        if (i == src_ignored_id) {
+            continue;
+        }
         const auto& r = src_info.at(i);
         // skip split customers in src route
         if (r > 0.0 && r < 1.0) {
@@ -255,6 +264,48 @@ find_closest(const Problem& prob, Solution& sln, size_t src_id, size_t dst_id) {
 
     if (closest_pairs.empty()) {
         return std::make_pair(src_end, dst_end);
+    }
+
+    // find closest pair of (src, dst) nodes in existing
+    return *std::min_element(closest_pairs.cbegin(), closest_pairs.cend(),
+                             [&prob](const IterPair& a, const IterPair& b) {
+                                 return prob.costs[*a.first][*a.second] <
+                                        prob.costs[*b.first][*b.second];
+                             });
+}
+
+/// Find closest node in src route to node
+std::pair<Solution::RouteType::iterator, Solution::RouteType::iterator>
+find_closest(const Problem& prob, Solution& sln, size_t src_id,
+             const Solution::RouteType::iterator& node_it,
+             size_t src_ignored_id) {
+    using IterPair =
+        std::pair<Solution::RouteType::iterator, Solution::RouteType::iterator>;
+    auto& src = sln.routes[src_id].second;
+    assert(!is_loop(src));
+    // Note: skip depots at both ends
+    auto src_first = std::next(src.begin());
+    auto src_end = std::prev(src.end());
+
+    // find closest dst node for each src node
+    const auto& src_info = sln.route_splits[src_id];
+    std::vector<IterPair> closest_pairs;
+    closest_pairs.reserve(src.size() - 2);
+    for (; src_first != src_end; ++src_first) {
+        size_t i = *src_first;
+        if (i == src_ignored_id) {
+            continue;
+        }
+        const auto& r = src_info.at(i);
+        // skip split customers in src route
+        if (r > 0.0 && r < 1.0) {
+            continue;
+        }
+        closest_pairs.emplace_back(src_first, node_it);
+    }
+
+    if (closest_pairs.empty()) {
+        return std::make_pair(src_end, node_it);
     }
 
     // find closest pair of (src, dst) nodes in existing
@@ -660,10 +711,6 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
             size_t r_in = 0, c_in = 0;
             std::tie(r_in, c_in) = *cfirst1;
             validate_indices(r_in, c_in, sln.routes);
-            auto& route_in = sln.routes[r_in].second;
-            if (is_loop(route_in)) {
-                continue;
-            }
             SplitInfo& split_in = sln.route_splits[r_in];
 
             auto cfirst2 = sln.customer_owners[customer].cbegin();
@@ -681,89 +728,74 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
 
                 SplitInfo& split_out = sln.route_splits[r_out];
 
-                auto it_in_before = atit(route_in, c_in - 1),
-                     it_in_after = atit(route_in, c_in + 1),
-                     it_out_before = atit(route_out, c_out - 1),
-                     it_out_after = atit(route_out, c_out + 1);
-
-                // find non-split neighbour that is going to be split
-                // Note: neighbour belongs to route_out, not route_in
-                auto neighbour_it_in = route_out.begin(),
-                     neighbour_it_out = route_in.begin();
-                std::tie(neighbour_it_in, neighbour_it_out) =
-                    find_closest(m_prob, sln, r_out, r_in);
-                if (neighbour_it_in == route_out.end() ||
-                    neighbour_it_out == route_in.end()) {
-                    continue;
-                }
-
-                auto n_it_in_before = std::prev(neighbour_it_in),
-                     n_it_in_after = std::next(neighbour_it_in),
-                     n_it_out_before = std::prev(neighbour_it_out),
-                     n_it_out_after = std::next(neighbour_it_out);
+                // TODO: doing copy here. seems to hard without it
+                auto route_in_orig = sln.routes[r_in].second;
+                auto& route_in = sln.routes[r_in].second;
 
                 const auto cost_before =
                     distance_on_route(m_prob, split_in, m_tw_penalty,
-                                      it_in_before, std::next(it_in_after)) +
+                                      route_in.cbegin(), route_in.cend()) +
                     distance_on_route(m_prob, split_out, m_tw_penalty,
-                                      it_out_before, std::next(it_out_after)) +
-                    // Note: for neighbour, route_in is output && route_out is
-                    //       input, so splits are __reversed__
-                    distance_on_route(m_prob, split_out, m_tw_penalty,
-                                      n_it_in_before,
-                                      std::next(n_it_in_after)) +
-                    distance_on_route(m_prob, split_in, m_tw_penalty,
-                                      n_it_out_before,
-                                      std::next(n_it_out_after));
+                                      route_out.cbegin(), route_out.cend());
 
-                // TODO: debug all this mess...
-
-                size_t neighbour = *neighbour_it_in;
-                const auto customer_neighbour_distance =
-                    m_prob.costs[neighbour][customer];
-                const auto customer_before_neighbour_value =
-                    customer_neighbour_distance +
-                    m_prob.costs[neighbour][at(route_in, c_in - 1)];
-                const auto customer_after_neighbour_value =
-                    customer_neighbour_distance +
-                    m_prob.costs[neighbour][at(route_in, c_in + 1)];
-
-                // insert neighbour, erase customer
-                Solution::RouteType::iterator inserted_neighbour,
-                    erased_customer;
-                if (customer_before_neighbour_value <
-                    customer_after_neighbour_value) {
-                    inserted_neighbour =
-                        route_in.insert(std::next(n_it_out_before), neighbour);
-                } else {
-                    inserted_neighbour =
-                        route_in.insert(n_it_out_after, neighbour);
-                }
-
+                // erase split customer from route_in -> perform split merge
                 auto erased_ratio = split_in.at(customer);
 
                 split_in.split_info.erase(customer);
                 split_out.split_info.at(customer) += erased_ratio;
 
+                route_in.erase(atit(route_in, c_in));
+
+                // if loop occured, find non-split neighbour closest to depot
+                const bool loop_occured = is_loop(route_in);
+
+                // find non-split neighbour to be split
+
+                // Note: neighbour belongs to route_out initially, not route_in
+                auto neighbour_it_in = route_out.begin(),
+                     neighbour_it_out = route_in.begin();
+
+                if (loop_occured) {
+                    std::tie(neighbour_it_in, neighbour_it_out) = find_closest(
+                        m_prob, sln, r_out, route_in.begin(), customer);
+                } else {
+                    std::tie(neighbour_it_in, neighbour_it_out) =
+                        find_closest(m_prob, sln, r_out, r_in, customer);
+                }
+                if (neighbour_it_in == route_out.end() ||
+                    neighbour_it_out == route_in.end()) {
+                    continue;
+                }
+
+                // decide where to put new node: before closest or after
+                size_t neighbour = *neighbour_it_in;
+                if (loop_occured) {
+                    // if route_in is loop, there's only one possibility
+                    route_in.insert(std::next(neighbour_it_out), neighbour);
+                } else {
+                    const auto before_value =
+                        m_prob.costs[neighbour][*std::prev(neighbour_it_out)];
+                    const auto after_value =
+                        m_prob.costs[neighbour][*std::next(neighbour_it_out)];
+
+                    // split neighbour in 2 parts
+                    if (before_value < after_value) {
+                        route_in.insert(neighbour_it_out, neighbour);
+                    } else {
+                        route_in.insert(std::next(neighbour_it_out), neighbour);
+                    }
+                }
+
+                // __the same__ ratio of neighbour (as was for customer) goes to
+                // new route
                 split_in.split_info[neighbour] = erased_ratio;
                 split_out.split_info.at(neighbour) -= erased_ratio;
 
-                erased_customer = route_in.erase(std::next(it_in_before));
-
-                // TODO: can use paired_distance_on_route twice?
                 const auto cost_after =
                     distance_on_route(m_prob, split_in, m_tw_penalty,
-                                      it_in_before, std::next(it_in_after)) +
+                                      route_in.cbegin(), route_in.cend()) +
                     distance_on_route(m_prob, split_out, m_tw_penalty,
-                                      it_out_before, std::next(it_out_after)) +
-                    // Note: for neighbour, route_in is output && route_out is
-                    //       input, so splits are __reversed__
-                    distance_on_route(m_prob, split_out, m_tw_penalty,
-                                      n_it_in_before,
-                                      std::next(n_it_in_after)) +
-                    distance_on_route(m_prob, split_in, m_tw_penalty,
-                                      n_it_out_before,
-                                      std::next(n_it_out_after));
+                                      route_out.cbegin(), route_out.cend());
 
                 const auto in_demand_after = total_demand(
                     m_prob, split_in, route_in.cbegin(), route_in.cend());
@@ -773,7 +805,7 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
                 // aspiration criteria
                 bool impossible_move =
                     lists.relocate_split.has(customer, r_in) &&
-                    lists.relocate_split.has(neighbour, r_out) &&  // TODO:debug
+                    lists.relocate_split.has(neighbour, r_out) &&
                     lists.pr_relocate_split.has(customer) &&
                     lists.pr_relocate_split.has(neighbour) &&
                     cost_after >= best_ever_value;
@@ -798,9 +830,6 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
                 if (!impossible_move && cost_after < cost_before) {
                     // move is good
                     sln.customer_owners[customer].erase(r_in);
-                    sln.customer_owners[neighbour][r_in] =
-                        std::distance(route_in.begin(), inserted_neighbour);
-                    // TODO: can update much less?
                     sln.update_customer_owners(m_prob, r_in);
                     lists.relocate_split.emplace(customer, r_out);
                     lists.relocate_split.emplace(neighbour, r_in);
@@ -813,18 +842,18 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
                     skip_to_next_customer = true;
                 } else {
                     // move is bad - roll back the changes
+                    sln.routes[r_in].second = std::move(route_in_orig);
                     split_in.split_info[customer] = erased_ratio;
                     split_out.split_info.at(customer) -= erased_ratio;
                     split_in.split_info.erase(neighbour);
                     split_out.split_info.at(neighbour) += erased_ratio;
-                    // TODO: the following will surely break!
-                    route_in.insert(erased_customer, customer);
-                    route_in.erase(inserted_neighbour);
                 }
             }
         }
     }
 
+    delete_loops_after_relocate(sln, lists);
+    sln.update_customer_owners(m_prob);
     return improved;
 }
 
