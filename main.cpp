@@ -33,8 +33,8 @@ public:
     ~FileHandler() { m_file.close(); }
 };
 
-void print_constraints(const vrp::Problem& prob, const vrp::Solution& sln,
-                       const std::string& name) {
+void print_main_info(const vrp::Problem& prob, const vrp::Solution& sln,
+                     const std::string& name) {
     LOG_INFO << name << " solution satisfies Capacity: "
              << vrp::constraints::satisfies_capacity(prob, sln) << EOL;
     LOG_INFO << name << " solution satisfies Site-Dependency: "
@@ -105,14 +105,14 @@ int main(int argc, char* argv[]) {
         throw std::runtime_error("no solutions found");
     }
 
-#ifndef NDEBUG
-    auto best_initial_sln = *std::min_element(
-        solutions.cbegin(), solutions.cend(),
-        [&problem](const auto& a, const auto& b) {
-            return objective(problem, a) < objective(problem, b);
-        });
-    print_constraints(problem, best_initial_sln, "Initial");
-#endif
+    if (print_debug_info) {
+        auto best_initial_sln = *std::min_element(
+            solutions.cbegin(), solutions.cend(),
+            [&problem](const auto& a, const auto& b) {
+                return objective(problem, a) < objective(problem, b);
+            });
+        print_main_info(problem, best_initial_sln, "Initial");
+    }
 
     std::vector<vrp::Solution> improved_solutions(solutions.size());
     vrp::threading::parallel_range(solutions.size(), [&](size_t first,
@@ -148,7 +148,7 @@ int main(int argc, char* argv[]) {
     parser.write(std::cout, problem, best_sln);
 
     if (print_debug_info) {
-        print_constraints(problem, best_sln, "Improved");
+        print_main_info(problem, best_sln, "Improved");
         print_fmt(objective(problem, best_sln),
                   vrp::constraints::total_violated_time(problem, best_sln),
                   vrp::constraints::total_violated_capacity(problem, best_sln));
