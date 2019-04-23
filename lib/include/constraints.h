@@ -37,10 +37,6 @@ inline int total_violated_time(const Problem& prob, const SplitInfo& info,
         const auto& next_c = customers[*next_first];
         assert(static_cast<size_t>(c.id) == *first);
         assert(static_cast<size_t>(next_c.id) == *next_first);
-        // skip depots
-        if (c.id == 0 || next_c.id == 0) {
-            continue;
-        }
 
         // c.hard_tw[0] + c.service + distance(c, next_c) + next_c.service
         // <=
@@ -75,10 +71,6 @@ total_violated_capacity(const Problem& prob, TransportationQuantity cap,
     for (; first != last; ++first) {
         const auto& c = customers[*first];
         assert(static_cast<size_t>(c.id) == *first);
-        // skip depots
-        if (c.id == 0) {
-            continue;
-        }
         cap -= (c.demand * info.at(c.id));
     }
 

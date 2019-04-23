@@ -21,6 +21,8 @@ struct SplitInfo {
             d = v;
             return *this;
         }
+        Ratio() = default;
+        inline Ratio(double v) : d(v) {}
         inline Ratio& operator+=(const Ratio& other) {
             d += other.d;
             return *this;
@@ -38,7 +40,13 @@ struct SplitInfo {
         return std::any_of(is.cbegin(), is.cend(),
                            [this](size_t i) { return has(i); });
     }
-    inline const Ratio& at(size_t i) const { return split_info.at(i); }
+    inline const Ratio& at(size_t i) const {
+        thread_local const Ratio depot_ratio = 1.0;
+        if (i == 0) {
+            return depot_ratio;
+        }
+        return split_info.at(i);
+    }
     inline bool empty() const noexcept { return split_info.empty(); }
 };
 

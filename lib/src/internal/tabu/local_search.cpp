@@ -125,10 +125,6 @@ inline TransportationQuantity total_demand(const Problem& prob,
     for (; first != last; ++first) {
         const auto& c = customers[*first];
         assert(static_cast<size_t>(c.id) == *first);
-        // skip depot
-        if (c.id == 0) {
-            continue;
-        }
         demand += (c.demand * info.at(c.id));
     }
 
