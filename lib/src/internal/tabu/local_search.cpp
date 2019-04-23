@@ -1293,129 +1293,142 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
         for (size_t iter = 0; iter < max_iters && !is_loop(route_in); ++iter) {
             size_t customer = *std::next(route_in.cbegin());
 
-            size_t _ = 0, c_index = 0;
-            std::tie(_, c_index) = *sln.customer_owners[customer].begin();
-            assert(_ == r_in);
+            size_t c_index = sln.customer_owners[customer][r_in];
             validate_indices(r_in, c_index, sln.routes);
-            // check if current route (where customer was relocated) is small,
-            // if not anymore, skip
-            if (_ == r_in && route_in.size() > threshold) {
+            // check if current route (where customer was relocated) is still
+            // small. if not anymore, skip
+            if (route_in.size() > threshold) {
                 break;
             }
 
             SplitInfo& split_in = sln.route_splits[r_in];
 
+            bool skip_to_next_iter = false;
             for (size_t neighbour = 1; neighbour < size; ++neighbour) {
+                if (skip_to_next_iter) {
+                    break;
+                }
                 if (customer == neighbour) {
                     continue;
                 }
 
-                size_t r_out = 0, n_index = 0;
-                std::tie(r_out, n_index) =
-                    *sln.customer_owners[neighbour].begin();
-                validate_indices(r_out, n_index, sln.routes);
-                // do not relocate inside the same route
-                if (r_in == r_out) {
-                    continue;
-                }
+                auto cfirst = sln.customer_owners[neighbour].cbegin(),
+                     clast = sln.customer_owners[neighbour].cend();
+                for (; !skip_to_next_iter && cfirst != clast; ++cfirst) {
+                    size_t r_out = 0, n_index = 0;
+                    std::tie(r_out, n_index) = *cfirst;
+                    validate_indices(r_out, n_index, sln.routes);
+                    // do not relocate inside the same route
+                    if (r_in == r_out) {
+                        continue;
+                    }
 
-                auto& route_out = sln.routes[r_out].second;
-                if (is_loop(route_out)) {
-                    continue;
-                }
-                if (!site_dependent(m_prob, sln.routes[r_out].first,
-                                    customer)) {
-                    // cannot insert customer in not allowed route
-                    continue;
-                }
+                    auto& route_out = sln.routes[r_out].second;
+                    if (is_loop(route_out)) {
+                        continue;
+                    }
+                    if (!site_dependent(m_prob, sln.routes[r_out].first,
+                                        customer)) {
+                        // cannot insert customer in not allowed route
+                        continue;
+                    }
 
-                SplitInfo& split_out = sln.route_splits[r_out];
-                if (m_enable_splits && split_out.has(customer)) {
-                    continue;
-                }
+                    SplitInfo& split_out = sln.route_splits[r_out];
+                    if (m_enable_splits && split_out.has(customer)) {
+                        continue;
+                    }
 
-                // customer value represents the length of route i -> j, where:
-                // ... -> (i -> customer -> j) -> ...
-                const auto customer_value = distance_on_route(
-                    m_prob, split_in, 0, route_in, c_index - 1, c_index + 2);
-                const auto customer_neighbour_distance =
-                    m_prob.costs[customer][neighbour];
-                const auto customer_before_neighbour_value =
-                    customer_neighbour_distance +
-                    m_prob.costs[customer][at(route_out, n_index - 1)];
-                const auto customer_after_neighbour_value =
-                    customer_neighbour_distance +
-                    m_prob.costs[customer][at(route_out, n_index + 1)];
+                    // customer value represents the length of route i -> j,
+                    // where:
+                    // ... -> (i -> customer -> j) -> ...
+                    const auto customer_value =
+                        distance_on_route(m_prob, split_in, 0, route_in,
+                                          c_index - 1, c_index + 2);
+                    const auto customer_neighbour_distance =
+                        m_prob.costs[customer][neighbour];
+                    const auto customer_before_neighbour_value =
+                        customer_neighbour_distance +
+                        m_prob.costs[customer][at(route_out, n_index - 1)];
+                    const auto customer_after_neighbour_value =
+                        customer_neighbour_distance +
+                        m_prob.costs[customer][at(route_out, n_index + 1)];
 
-                // if customer is closer to it's neighbours in __current__
-                // route, do not relocate to neighbours in __new__ route
-                if (customer_value < customer_before_neighbour_value &&
-                    customer_value < customer_after_neighbour_value) {
-                    continue;
-                }
+                    // if customer is closer to it's neighbours in
+                    // __current__ route, do not relocate to neighbours in
+                    // __new__ route
+                    if (customer_value < customer_before_neighbour_value &&
+                        customer_value < customer_after_neighbour_value) {
+                        continue;
+                    }
 
-                // we assume there's a better place for our customer at this
-                // point
+                    // we assume there's a better place for our customer at
+                    // this point
 
-                auto it_in_before = atit(route_in, c_index - 1),
-                     it_in_after = atit(route_in, c_index + 1),
-                     it_out_before = atit(route_out, n_index - 1),
-                     it_out_after = atit(route_out, n_index + 1);
+                    auto it_in_before = atit(route_in, c_index - 1),
+                         it_in_after = atit(route_in, c_index + 1),
+                         it_out_before = atit(route_out, n_index - 1),
+                         it_out_after = atit(route_out, n_index + 1);
 
-                const auto cost_before =
-                    distance_on_route(m_prob, split_in, m_tw_penalty,
-                                      it_in_before, std::next(it_in_after)) +
-                    distance_on_route(m_prob, split_out, m_tw_penalty,
-                                      it_out_before, std::next(it_out_after));
+                    const auto cost_before =
+                        distance_on_route(m_prob, split_in, m_tw_penalty,
+                                          it_in_before,
+                                          std::next(it_in_after)) +
+                        distance_on_route(m_prob, split_out, m_tw_penalty,
+                                          it_out_before,
+                                          std::next(it_out_after));
 
-                Solution::RouteType::iterator inserted, erased;
-                if (customer_before_neighbour_value <
-                    customer_after_neighbour_value) {
-                    inserted =
-                        route_out.insert(std::next(it_out_before), customer);
-                } else {
-                    inserted = route_out.insert(it_out_after, customer);
-                }
+                    Solution::RouteType::iterator inserted, erased;
+                    if (customer_before_neighbour_value <
+                        customer_after_neighbour_value) {
+                        inserted = route_out.insert(std::next(it_out_before),
+                                                    customer);
+                    } else {
+                        inserted = route_out.insert(it_out_after, customer);
+                    }
 
-                transfer_split_entry(m_enable_splits, split_in, split_out,
-                                     customer);
-
-                erased = route_in.erase(std::next(it_in_before));
-
-                const auto cost_after =
-                    distance_on_route(m_prob, split_in, m_tw_penalty,
-                                      it_in_before, std::next(it_in_after)) +
-                    distance_on_route(m_prob, split_out, m_tw_penalty,
-                                      it_out_before, std::next(it_out_after));
-
-                const auto out_demand_after = total_demand(
-                    m_prob, split_out, route_out.cbegin(), route_out.cend());
-
-                const auto out_capacity =
-                    m_prob.vehicles[sln.routes[r_out].first].capacity;
-                bool impossible_move = (out_demand_after > out_capacity);
-                impossible_move |=
-                    (!m_can_violate_tw &&
-                     (constraints::total_violated_time(m_prob, split_in,
-                                                       route_in.cbegin(),
-                                                       route_in.cend()) != 0 ||
-                      constraints::total_violated_time(m_prob, split_out,
-                                                       route_out.cbegin(),
-                                                       route_out.cend()) != 0));
-
-                // decide whether move is good
-                if (!impossible_move && cost_after < cost_before) {
-                    // move is good
-                    sln.customer_owners[customer].erase(r_in);
-                    sln.update_customer_owners(m_prob, r_in, c_index);
-                    sln.update_customer_owners(m_prob, r_out, n_index - 1);
-                    break;
-                } else {
-                    // move is bad - roll back the changes
-                    route_in.insert(erased, customer);
-                    route_out.erase(inserted);
-                    transfer_split_entry(m_enable_splits, split_out, split_in,
+                    transfer_split_entry(m_enable_splits, split_in, split_out,
                                          customer);
+
+                    erased = route_in.erase(std::next(it_in_before));
+
+                    const auto cost_after =
+                        distance_on_route(m_prob, split_in, m_tw_penalty,
+                                          it_in_before,
+                                          std::next(it_in_after)) +
+                        distance_on_route(m_prob, split_out, m_tw_penalty,
+                                          it_out_before,
+                                          std::next(it_out_after));
+
+                    const auto out_demand_after =
+                        total_demand(m_prob, split_out, route_out.cbegin(),
+                                     route_out.cend());
+
+                    const auto out_capacity =
+                        m_prob.vehicles[sln.routes[r_out].first].capacity;
+                    bool impossible_move = (out_demand_after > out_capacity);
+                    impossible_move |=
+                        (!m_can_violate_tw &&
+                         (constraints::total_violated_time(
+                              m_prob, split_in, route_in.cbegin(),
+                              route_in.cend()) != 0 ||
+                          constraints::total_violated_time(
+                              m_prob, split_out, route_out.cbegin(),
+                              route_out.cend()) != 0));
+
+                    // decide whether move is good
+                    if (!impossible_move && cost_after < cost_before) {
+                        // move is good
+                        sln.customer_owners[customer].erase(r_in);
+                        sln.update_customer_owners(m_prob, r_in, c_index);
+                        sln.update_customer_owners(m_prob, r_out, n_index - 1);
+                        skip_to_next_iter = true;
+                    } else {
+                        // move is bad - roll back the changes
+                        route_in.insert(erased, customer);
+                        route_out.erase(inserted);
+                        transfer_split_entry(m_enable_splits, split_out,
+                                             split_in, customer);
+                    }
                 }
             }
         }
