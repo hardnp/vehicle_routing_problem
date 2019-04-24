@@ -18,19 +18,20 @@
 
 namespace vrp {
 namespace tabu {
-namespace detail {
-
 #define USE_HASH_SET 1
 
-template<typename T, int Tenure> struct Entry {
-    T value;
+namespace detail {
+template<typename T, int Tenure> struct Entry : public T {
+    // T value;
     int count = Tenure;
 
     Entry() = delete;
-    Entry(const T& v) : value(v) {}
-    bool operator==(const Entry& other) const { return value == other.value; }
-    bool operator<(const Entry& other) const { return value < other.value; }
-    bool operator==(const T& other_value) const { return value == other_value; }
+    inline Entry(const T& v) : T(v) {}
+    inline Entry(T&& v) : T(std::move(v)) {}
+    // bool operator==(const Entry& other) const { return value == other.value;
+    // } bool operator<(const Entry& other) const { return value < other.value;
+    // } bool operator==(const T& other_value) const { return value ==
+    // other_value; }
 };
 
 #if USE_HASH_SET
@@ -38,14 +39,15 @@ template<typename U, int Tenure = 0> struct Hash {};
 
 template<int Tenure> struct Hash<std::pair<size_t, size_t>, Tenure> {
     inline size_t
-    operator()(const Entry<std::pair<size_t, size_t>, Tenure>& e) const {
-        return (e.value.first << 16) ^ e.value.second;
+    operator()(const Entry<std::pair<size_t, size_t>, Tenure>& e) const
+        noexcept {
+        return (e.first << 16) ^ e.second;
     }
 };
 
 template<int Tenure> struct Hash<size_t, Tenure> {
-    inline size_t operator()(const Entry<size_t, Tenure>& e) const {
-        return e.value;
+    inline size_t operator()(const Entry<size_t, Tenure>& e) const noexcept {
+        return e;
     }
 };
 #endif
@@ -63,7 +65,7 @@ template<typename T, int Tenure> class TabuList {
     inline set_t diff(const set_t& lhs, const set_t& rhs) {
         set_t result;
         // TODO: is it only me or std::set_difference doesn't return __unique__
-        // values only found in first of two sets?
+        // values but only found in first of two sets?
         std::set_difference(rhs.cbegin(), rhs.cend(), lhs.cbegin(), lhs.cend(),
                             std::inserter(result, result.end()));
         return result;
@@ -181,5 +183,7 @@ public:
         pr_relocate_new_route.clear();
     }
 };
+
+#undef USE_HASH_SET
 }  // namespace tabu
 }  // namespace vrp

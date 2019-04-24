@@ -198,13 +198,13 @@ void delete_loops_after_relocate(Solution& sln, TabuLists& lists) {
             while (!relocate_list.empty()) {
                 auto entry = *relocate_list.begin();
                 relocate_list.erase(relocate_list.begin());
-                if (entry.value.second == ri) {
+                if (entry.second == ri) {
                     continue;
                 }
                 for (size_t i = ri + 1, size = sln.routes.size(); i < size;
                      ++i) {
-                    if (entry.value.second == i) {
-                        entry.value.second--;
+                    if (entry.second == i) {
+                        entry.second--;
                         break;
                     }
                 }
