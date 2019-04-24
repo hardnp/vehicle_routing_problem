@@ -337,17 +337,18 @@ find_closest(const Problem& prob, Solution& sln, size_t src_id,
 LocalSearchMethods::LocalSearchMethods(const Problem& prob) noexcept
     : m_prob(prob), m_enable_splits(prob.enable_splits()) {
     m_methods[0] = std::bind(&LocalSearchMethods::relocate, this,
-                             std::placeholders::_1, std::placeholders::_2);
+                             std::placeholders::_1, std::placeholders::_2, 0);
     m_methods[1] = std::bind(&LocalSearchMethods::exchange, this,
-                             std::placeholders::_1, std::placeholders::_2);
+                             std::placeholders::_1, std::placeholders::_2, 1);
     m_methods[2] = std::bind(&LocalSearchMethods::two_opt, this,
-                             std::placeholders::_1, std::placeholders::_2);
+                             std::placeholders::_1, std::placeholders::_2, 2);
     m_methods[3] = std::bind(&LocalSearchMethods::cross, this,
-                             std::placeholders::_1, std::placeholders::_2);
+                             std::placeholders::_1, std::placeholders::_2, 3);
     m_methods[4] = std::bind(&LocalSearchMethods::relocate_new_route, this,
-                             std::placeholders::_1, std::placeholders::_2);
+                             std::placeholders::_1, std::placeholders::_2, 4);
     m_methods[5] = std::bind(&LocalSearchMethods::relocate_split, this,
-                             std::placeholders::_1, std::placeholders::_2);
+                             std::placeholders::_1, std::placeholders::_2, 5);
+    assert(m_methods.size() == m_best_values.size());
 
     if (!prob.enable_splits()) {
         for (size_t c = 0, size = prob.n_customers(); c < size; ++c) {
@@ -391,8 +392,9 @@ inline void validate_indices(
     assert(c_id < routes[r_id].second.size());
 }
 
-bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
-    static double best_ever_value = std::numeric_limits<double>::max();
+bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists,
+                                  size_t method_id) {
+    auto& best_ever_value = m_best_values[method_id];
 
     bool improved = false;
 
@@ -573,8 +575,9 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists) {
     return improved;
 }
 
-bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists) {
-    static double best_ever_value = std::numeric_limits<double>::max();
+bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists,
+                                            size_t method_id) {
+    auto& best_ever_value = m_best_values[method_id];
 
     const auto vehicles_size = m_prob.n_vehicles();
     if (sln.routes.size() >= vehicles_size) {
@@ -701,11 +704,12 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists) {
     return improved;
 }
 
-bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
+bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
+                                        size_t method_id) {
     if (!m_prob.enable_splits()) {
         return false;
     }
-    static double best_ever_value = std::numeric_limits<double>::max();
+    auto& best_ever_value = m_best_values[method_id];
 
     bool improved = false;
 
@@ -873,8 +877,9 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists) {
     return improved;
 }
 
-bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
-    static double best_ever_value = std::numeric_limits<double>::max();
+bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
+                                  size_t method_id) {
+    auto& best_ever_value = m_best_values[method_id];
 
     bool improved = false;
 
@@ -1031,8 +1036,9 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists) {
     return improved;
 }
 
-bool LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
-    static double best_ever_value = std::numeric_limits<double>::max();
+bool LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists,
+                                 size_t method_id) {
+    auto& best_ever_value = m_best_values[method_id];
 
     bool improved = false;
 
@@ -1105,8 +1111,9 @@ bool LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists) {
     return improved;
 }
 
-bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists) {
-    static double best_ever_value = std::numeric_limits<double>::max();
+bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
+                               size_t method_id) {
+    auto& best_ever_value = m_best_values[method_id];
 
     bool improved = false;
 

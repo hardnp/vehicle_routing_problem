@@ -15,6 +15,8 @@ class LocalSearchMethods {
 
     using methods_t = std::vector<std::function<bool(Solution&, TabuLists&)>>;
     methods_t m_methods = methods_t(6);
+    std::vector<double> m_best_values =
+        std::vector<double>(6, std::numeric_limits<double>::max());
 
     double m_tw_penalty = 0.0;      ///< penalty for time windows violation
     bool m_can_violate_tw = false;  ///< flag to specify if TW can be violated
@@ -24,6 +26,14 @@ class LocalSearchMethods {
     bool m_explore_all_neighbourhoods =
         false;  ///< explore all solution, do not use "first improvement"
                 ///< strategy
+
+    // main local search heuristics. accessed via operator[]
+    bool exchange(Solution& sln, TabuLists& lists, size_t method_id);
+    bool relocate(Solution& sln, TabuLists& lists, size_t method_id);
+    bool two_opt(Solution& sln, TabuLists& lists, size_t method_id);
+    bool cross(Solution& sln, TabuLists& lists, size_t method_id);
+    bool relocate_new_route(Solution& sln, TabuLists& lists, size_t method_id);
+    bool relocate_split(Solution& sln, TabuLists& lists, size_t method_id);
 
 public:
     LocalSearchMethods() = delete;
@@ -37,14 +47,6 @@ public:
 
     size_t size() const;
     const methods_t::value_type& operator[](size_t i) const;
-
-    // main local search heuristics:
-    bool exchange(Solution& sln, TabuLists& lists);
-    bool relocate(Solution& sln, TabuLists& lists);
-    bool two_opt(Solution& sln, TabuLists& lists);
-    bool cross(Solution& sln, TabuLists& lists);
-    bool relocate_new_route(Solution& sln, TabuLists& lists);
-    bool relocate_split(Solution& sln, TabuLists& lists);
     std::string str(size_t i) const;
 
     // additional heuristics:
