@@ -120,7 +120,7 @@ public:
 
 class TabuLists {
     using tabu_list_t = TabuList<std::pair<size_t, size_t>, TABU_TENURE>;
-    using preserve_list_t = TabuList<size_t, PRESERVE_TENURE>;
+    using preserve_list_t = tabu_list_t;
 
 public:
     // tabu lists. each entry depends on a used heuristic
@@ -137,7 +137,9 @@ public:
     // pair of customer && route
     tabu_list_t relocate_new_route = {};
 
-    // preserve lists. each entry is a customer index
+    // preserve lists: data stored is similar to tabu lists, but the purpose is
+    // to preserve node at the place where it belongs. in a nutshell, preserve
+    // list is the opposite of tabu list
     preserve_list_t pr_exchange = {};
     preserve_list_t pr_relocate = {};
     preserve_list_t pr_two_opt = {};

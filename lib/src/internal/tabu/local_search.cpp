@@ -532,8 +532,8 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists,
 
                     // aspiration criteria
                     bool impossible_move =
-                        lists.relocate.has(customer, r_out) &&
-                        lists.pr_relocate.has(customer) &&
+                        (lists.relocate.has(customer, r_out) ||
+                         lists.pr_relocate.has(customer, r_in)) &&
                         cost_after >= best_ever_value;
 
                     const auto out_capacity =
@@ -554,7 +554,7 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists,
                         sln.update_customer_owners(m_prob, r_out, n_index - 1);
                         lists.relocate.emplace(customer, r_in);
 #if USE_PRESERVE_ENTRIES
-                        lists.pr_relocate.emplace(customer);
+                        lists.pr_relocate.emplace(customer, r_out);
 #endif
                         best_ever_value = std::min(best_ever_value, cost_after);
                         improved = true;
@@ -671,19 +671,20 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists,
                                   std::prev(it_out), std::next(it_out, 2));
 
             const bool impossible_move =
-                lists.pr_relocate_new_route.has(customer) &&
+                lists.pr_relocate_new_route.has(customer, r_in) &&
                 cost_after >= best_ever_value;
 
             // decide whether move is good
             if (!impossible_move && cost_after < cost_before) {
                 // move is good
+                size_t r_out = sln.routes.size() - 1;
                 sln.customer_owners[customer].erase(r_in);
                 sln.update_customer_owners(m_prob, r_in, c_index);
-                sln.update_customer_owners(m_prob, sln.routes.size() - 1);
+                sln.update_customer_owners(m_prob, r_out);
                 sln.used_vehicles.emplace(used_vehicle);
                 lists.relocate_new_route.emplace(customer, r_in);
 #if USE_PRESERVE_ENTRIES
-                lists.pr_relocate_new_route.emplace(customer);
+                lists.pr_relocate_new_route.emplace(customer, r_out);
 #endif
                 best_ever_value = cost_after;
                 improved = true;
@@ -825,10 +826,12 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
 
                 // aspiration criteria
                 bool impossible_move =
-                    lists.relocate_split.has(customer, r_in) &&
-                    lists.relocate_split.has(neighbour, r_out) &&
-                    lists.pr_relocate_split.has(customer) &&
-                    lists.pr_relocate_split.has(neighbour) &&
+                    (lists.relocate_split.has(customer, r_out) ||
+                     lists.pr_relocate_split.has(customer, r_in)) &&
+                    cost_after >= best_ever_value;
+                impossible_move |=
+                    (lists.relocate_split.has(neighbour, r_in) ||
+                     lists.pr_relocate_split.has(neighbour, r_out)) &&
                     cost_after >= best_ever_value;
 
                 const auto in_capacity =
@@ -852,11 +855,11 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
                     // move is good
                     sln.customer_owners[customer].erase(r_in);
                     sln.update_customer_owners(m_prob, r_in);
-                    lists.relocate_split.emplace(customer, r_out);
-                    lists.relocate_split.emplace(neighbour, r_in);
+                    lists.relocate_split.emplace(customer, r_in);
+                    lists.relocate_split.emplace(neighbour, r_out);
 #if USE_PRESERVE_ENTRIES
-                    lists.pr_relocate_split.emplace(customer);
-                    lists.pr_relocate_split.emplace(neighbour);
+                    lists.pr_relocate_split.emplace(customer, r_out);
+                    lists.pr_relocate_split.emplace(neighbour, r_in);
 #endif
                     best_ever_value = std::min(best_ever_value, cost_after);
                     improved = true;
@@ -981,11 +984,13 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
                                    demand2_before - demand_it2 + demand_it1;
 
                     // aspiration criteria
-                    bool impossible_move = (lists.exchange.has(customer, r2) ||
-                                            lists.exchange.has(neighbour, r1) ||
-                                            lists.pr_exchange.has(customer) ||
-                                            lists.pr_exchange.has(neighbour)) &&
-                                           cost_after >= best_ever_value;
+                    bool impossible_move =
+                        (lists.exchange.has(customer, r2) ||
+                         lists.pr_exchange.has(customer, r1)) &&
+                        cost_after >= best_ever_value;
+                    impossible_move |= (lists.exchange.has(neighbour, r1) ||
+                                        lists.pr_exchange.has(neighbour, r2)) &&
+                                       cost_after >= best_ever_value;
 
                     const auto
                         route1_capacity =
@@ -1015,8 +1020,8 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
                         lists.exchange.emplace(customer, r1);
                         lists.exchange.emplace(neighbour, r2);
 #if USE_PRESERVE_ENTRIES
-                        lists.pr_exchange.emplace(customer);
-                        lists.pr_exchange.emplace(neighbour);
+                        lists.pr_exchange.emplace(customer, r2);
+                        lists.pr_exchange.emplace(neighbour, r1);
 #endif
                         best_ever_value = std::min(best_ever_value, cost_after);
                         improved = true;
@@ -1055,12 +1060,13 @@ bool LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists,
             bool found_new_best = false;
             // skip depots && beware of k = i + 1
             for (auto i = std::next(route.begin());
-                 i != std::prev(route.end(), 2); ++i) {
-                if (found_new_best)  // fast loop break
-                    break;
+                 !found_new_best && i != std::prev(route.end(), 2); ++i) {
+                size_t customer_i = *i;
+
                 // skip depots && start from i + 1
-                for (auto k = std::next(i); k != std::prev(route.end()); ++k) {
-                    size_t ic_next = *std::next(i), kc_next = *std::next(k);
+                for (auto k = std::next(i);
+                     !found_new_best && k != std::prev(route.end()); ++k) {
+                    size_t customer_k = *k;
 
                     // cost before: (i-1)->i->(i+1) + (k-1)->k->(k+1)
                     const auto cost_before = paired_distance_on_route(
@@ -1072,10 +1078,10 @@ bool LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists,
                         m_prob, split, split, m_tw_penalty, i, k);
 
                     // aspiration
-                    bool impossible_move = (lists.two_opt.has(*i, *k) ||
-                                            lists.pr_two_opt.has(*i) ||
-                                            lists.pr_two_opt.has(*k)) &&
-                                           cost_after >= best_ever_value;
+                    bool impossible_move =
+                        (lists.two_opt.has(customer_k, customer_i) ||
+                         lists.pr_two_opt.has(customer_k, customer_i)) &&
+                        cost_after >= best_ever_value;
 
                     impossible_move |= (!m_can_violate_tw &&
                                         (constraints::total_violated_time(
@@ -1087,15 +1093,12 @@ bool LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists,
                         // move is good
                         found_new_best = true;
                         // forbid previously existing edges
-                        lists.two_opt.emplace(*i, ic_next);
-                        lists.two_opt.emplace(*k, kc_next);
+                        lists.two_opt.emplace(customer_i, customer_k);
 #if USE_PRESERVE_ENTRIES
-                        lists.pr_two_opt.emplace(*i);
-                        lists.pr_two_opt.emplace(*k);
+                        lists.pr_two_opt.emplace(customer_k, customer_i);
 #endif
                         best_ever_value = std::min(best_ever_value, cost_after);
-                        improved = false;
-                        break;
+                        improved = true;
                     } else {
                         // move is bad - roll back the changes
                         std::reverse(i, std::next(k));
@@ -1181,7 +1184,8 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
                     }
 
                     // we assume we can exchange two iterators at this point
-                    size_t c_next1 = *std::next(it1), c_next2 = *std::next(it2);
+                    size_t customer_next = *std::next(it1),
+                           neighbour_next = *std::next(it2);
 
                     const auto cost_before =
                         distance_on_route(m_prob, split1, m_tw_penalty, it1,
@@ -1221,11 +1225,14 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
                                                 route2.cend());
 
                     // aspiration criteria
-                    bool impossible_move = (lists.cross.has(customer, r2) ||
-                                            lists.cross.has(neighbour, r1) ||
-                                            lists.pr_cross.has(customer) ||
-                                            lists.pr_cross.has(neighbour)) &&
-                                           cost_after >= best_ever_value;
+                    bool impossible_move =
+                        (lists.cross.has(customer, neighbour_next) ||
+                         lists.pr_cross.has(customer, customer_next)) &&
+                        cost_after >= best_ever_value;
+                    impossible_move |=
+                        (lists.cross.has(neighbour, customer_next) ||
+                         lists.pr_cross.has(neighbour, neighbour_next)) &&
+                        cost_after >= best_ever_value;
 
                     const auto
                         route1_capacity =
@@ -1257,11 +1264,11 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
                         }
                         sln.update_customer_owners(m_prob, r1, c_index);
                         sln.update_customer_owners(m_prob, r2, n_index);
-                        lists.cross.emplace(*it1, c_next1);
-                        lists.cross.emplace(*it2, c_next2);
+                        lists.cross.emplace(customer, customer_next);
+                        lists.cross.emplace(neighbour, neighbour_next);
 #if USE_PRESERVE_ENTRIES
-                        lists.pr_cross.emplace(*it1);
-                        lists.pr_cross.emplace(*it2);
+                        lists.pr_cross.emplace(customer, neighbour_next);
+                        lists.pr_cross.emplace(neighbour, customer_next);
 #endif
                         best_ever_value = std::min(best_ever_value, cost_after);
                         improved = true;
