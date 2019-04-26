@@ -120,6 +120,8 @@ public:
     // TODO: add to CSV
     double time_coeff = 0.0;  ///< time scale coefficient for objective
     int max_splits = 1;  ///< max number of vehicles delivering to a customer
+    static constexpr const double split_thr =
+        0.25;  ///< split delivery threshold
 
     // TODO: should be part of ctor
     void set_up() {

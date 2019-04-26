@@ -54,8 +54,6 @@ class Heuristic;
 
 std::unordered_map<size_t, std::vector<size_t>> select_seeds(const Heuristic&);
 
-constexpr const double SPLIT_THR = 0.25;
-
 /// Heuristic class that solves the relaxed 0-1 Integer Problem
 class Heuristic {
     const Problem& m_prob;
@@ -291,8 +289,8 @@ public:
                 assert(m_x[i].getSize() == m_y[i].getSize());
                 for (int t = 0; t < m_x[i].getSize(); ++t) {
                     limit_constraints1.add(m_y[i][t] >= m_x[i][t]);
-                    limit_constraints2.add(m_y[i][t] <=
-                                           m_x[i][t] + (1.0 - SPLIT_THR));
+                    limit_constraints2.add(
+                        m_y[i][t] <= m_x[i][t] + (1.0 - Problem::split_thr));
                 }
             }
             m_model.add(limit_constraints1);
@@ -446,9 +444,9 @@ std::vector<double> fix_ratios(const TransportationQuantity& demand,
     const auto volume = demand.volume;
 
     // construct ratios aligned to demand
-    const int grain_size = static_cast<int>(std::ceil(volume * SPLIT_THR));
+    int start = static_cast<int>(std::ceil(volume * Problem::split_thr));
     std::vector<double> aligned_ratios;
-    for (int start = grain_size; start <= volume; ++start) {
+    for (; start <= volume; ++start) {
         aligned_ratios.emplace_back(static_cast<double>(start) / volume);
     }
 

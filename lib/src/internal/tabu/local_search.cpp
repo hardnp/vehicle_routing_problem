@@ -23,6 +23,8 @@ namespace {
 
 #define SORT_HEURISTIC_OPERANDS 0
 
+#define RELOCATE_SPLIT_SAME_VOLUME 0  // doing relocate split, use same volume
+
 // true if vehicle can deliver to customer, false otherwise
 inline bool site_dependent(const Problem& prob, size_t vehicle,
                            size_t customer) {
@@ -808,10 +810,40 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
                     }
                 }
 
-                // __the same__ ratio of neighbour (as was for customer) goes to
-                // new route
-                split_in.split_info[neighbour] = erased_ratio;
-                split_out.split_info.at(neighbour) -= erased_ratio;
+#if RELOCATE_SPLIT_SAME_VOLUME
+                // __the same__ volume of neighbour (as was for customer) goes
+                // to new route: but the ratio changes!
+
+                // Note: proper ratios are ensured so erased volume is always
+                //       int. anyway, there's a std::round() to make double
+                //       arithmetics less noisy
+                const double erased_volume = std::round(
+                    erased_ratio * m_prob.customers[customer].demand.volume);
+                double inserted_ratio =
+                    erased_volume / m_prob.customers[neighbour].demand.volume;
+
+                // cannot relocate if erased volume > inserted volume or
+                // inserted ratio < threshold
+                const bool impossible_relocate =
+                    static_cast<int>(erased_volume) >
+                        m_prob.customers[neighbour].demand.volume ||
+                    inserted_ratio < m_prob.split_thr;
+
+                // fix ratio if insertion is impossible
+                inserted_ratio = impossible_relocate ? 0.0 : inserted_ratio;
+#else
+                // use the same ratio: this breaks aligned ratios (aligned by
+                // integer volume), but gives more room for improvement. also,
+                // std::ceil() is used everywhere, so it's safe _not_ to modify
+                // the value here
+                const auto& inserted_ratio = erased_ratio;
+
+                // can do relocate split always
+                static constexpr const bool impossible_relocate = false;
+#endif
+
+                split_in.split_info[neighbour] = inserted_ratio;
+                split_out.split_info.at(neighbour) -= inserted_ratio;
 
                 const auto cost_after =
                     distance_on_route(m_prob, split_in, m_tw_penalty,
@@ -850,6 +882,8 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
                                                        route_out.cbegin(),
                                                        route_out.cend()) != 0));
 
+                impossible_move |= impossible_relocate;
+
                 // decide whether move is good
                 if (!impossible_move && cost_after < cost_before) {
                     // move is good
@@ -870,7 +904,7 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
                     split_in.split_info[customer] = erased_ratio;
                     split_out.split_info.at(customer) -= erased_ratio;
                     split_in.split_info.erase(neighbour);
-                    split_out.split_info.at(neighbour) += erased_ratio;
+                    split_out.split_info.at(neighbour) += inserted_ratio;
                 }
             }
         }
