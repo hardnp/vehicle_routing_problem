@@ -119,6 +119,11 @@ def write_max_violated_soft_tw(io_stream):
     io_stream.write('value max_violated_soft_tw\n0\n')
 
 
+def write_max_splits(io_stream):
+    """Write max number of splits per customer into provided stream"""
+    io_stream.write('value max_splits\n1\n')
+
+
 def main():
     """Main entry-point"""
     args = parse_args()
@@ -129,7 +134,6 @@ def main():
     for i, instance in enumerate(args.instances):
         print('[{current}/{all}] {instance}'.format(
             current=i+1, all=len(args.instances), instance=instance))
-        # print('Reading {instance} ...'.format(instance=instance))
         vnumber, vcapacity, customers = 0, 0, []
         with open(instance, 'r') as instance_file:
             # vehicles number, vehicles capacity, customers data
@@ -138,7 +142,6 @@ def main():
         instance_basename, _ = os.path.splitext(os.path.basename(instance))
         csv = os.path.abspath(str(Path(
             test_data, instance_basename.lower() + '.csv')))
-        # print('Converting to {csv} ...'.format(csv=csv))
         with open(csv, 'w+') as csv_file:
             write_table_customer(csv_file, customers)
             csv_file.write('\n')
@@ -149,6 +152,8 @@ def main():
             write_table_times(csv_file, customers)
             csv_file.write('\n')
             write_max_violated_soft_tw(csv_file)
+            csv_file.write('\n')
+            write_max_splits(csv_file)
             csv_file.write('\n')
     return 0
 

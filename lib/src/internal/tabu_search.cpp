@@ -22,9 +22,10 @@ namespace {
 constexpr const double MULTIPLIER = 1.0;
 
 // constants
-constexpr const uint32_t MAX_ITERS = std::numeric_limits<uint32_t>::max();
 constexpr const uint32_t TABU_SEARCH_ITERS = 100 * MULTIPLIER;
+constexpr const uint32_t MAX_ITERS = 10 * TABU_SEARCH_ITERS;
 constexpr const uint32_t ROUTE_SAVING_ITERS = 5 * MULTIPLIER;
+constexpr const uint32_t MERGE_SPLITS_ITERS = 10 * MULTIPLIER;
 constexpr const uint32_t INTRA_RELOCATION_ITERS = 15 * MULTIPLIER;
 constexpr const double TIME_WINDOWS_PENALTY_BASE = 1.2;
 
@@ -230,12 +231,16 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
 
         const bool perform_route_saving = ci % ROUTE_SAVING_ITERS == 0;
         const bool perform_intra_relocation = i > INTRA_RELOCATION_ITERS;
+        const bool perform_merge_splits = ci % MERGE_SPLITS_ITERS == 0;
 
         if (perform_route_saving) {
             ls.route_save(curr_sln, route_saving_threshold);
         }
         if (perform_intra_relocation) {
             ls.intra_relocate(curr_sln);
+        }
+        if (perform_merge_splits) {
+            ls.merge_splits(curr_sln);
         }
 
 #if DYNAMIC_VIOLATIONS

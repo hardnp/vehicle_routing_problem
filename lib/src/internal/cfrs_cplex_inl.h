@@ -3,20 +3,19 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <functional>
 #include <list>
 #include <numeric>
 #include <random>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 #define ILOUSESTL
 using namespace std;
 #include "ilcplex/ilocplex.h"
-
-/// Specify that the variable x is unused in the code
-#define UNUSED(x) (void)x
 
 namespace vrp {
 namespace detail {
@@ -34,13 +33,13 @@ int total(AttribAccessor accessor, const std::vector<Vehicle>& vehicles,
                            });
 }
 
-/// Cost of assigning customer i to vehicle t. Single vehicle in type case.
+/// Cost of assigning customer i to seed
 inline double assignment_cost(const Problem& prob, size_t seed, size_t i) {
     const auto& c = prob.costs;
     return c[0][i] + c[i][seed] - c[0][seed];
 }
 
-/// Cost of assigning customer i to vehicle t. General case.
+/// Min of costs of assigning customer i to each seed in seeds
 double assignment_cost(const Problem& prob, const std::vector<size_t>& seeds,
                        size_t i) {
     const auto size = seeds.size();
@@ -60,8 +59,10 @@ class Heuristic {
     const Problem& m_prob;
 
     IloEnv m_env;
-    std::vector<IloIntVarArray> m_x;  ///< x[i][t]: 1 if customer i is assigned
-                                      /// to vehicle t. index is customer
+    std::vector<IloNumVarArray> m_x;  ///< x[i][t]: 1 if customer i is assigned
+                                      /// to type t. index is customer
+    std::vector<IloIntVarArray> m_y;  ///< y[i][t]: internal value that forces
+                                      ///< x[i][t] to be an integer or float
     IloModel m_model = IloModel(m_env);
     IloCplex m_algo = IloCplex(m_model);
     IloObjective m_objective;
@@ -75,19 +76,19 @@ class Heuristic {
         m_model.add(IloConstraint(zero_expr == 0));
     }
 
-    /// Cost of assigning customer i to vehicle t. Single vehicle in type case.
+    /// Cost of assigning customer i to seed s
     inline double assignment_cost(size_t seed, size_t i) {
         return ::vrp::detail::assignment_cost(m_prob, seed, i);
     }
 
-    /// Cost of assigning customer i to vehicle t. General case.
+    /// Min of costs of assigning customer i to each seed in seeds
     inline double assignment_cost(const std::vector<size_t>& seeds, size_t i) {
         return ::vrp::detail::assignment_cost(m_prob, seeds, i);
     }
 
 public:
     inline IloEnv& env() { return m_env; }
-    inline std::vector<IloIntVarArray>& X() { return m_x; }
+    inline std::vector<IloNumVarArray>& X() { return m_x; }
     inline IloModel& model() { return m_model; }
     inline IloCplex& algo() { return m_algo; }
     inline IloObjective& objective() { return m_objective; }
@@ -105,8 +106,14 @@ public:
         const auto& types = prob.vehicle_types();
         const auto types_size = types.size();
 
+        m_x.reserve(n_customers);
         for (size_t i = 1; i < n_customers; ++i) {
-            m_x.emplace_back(IloIntVarArray(m_env, types_size, 0.0, 1.0));
+            m_x.emplace_back(IloNumVarArray(m_env, types_size, 0.0, 1.0));
+        }
+
+        m_y.reserve(n_customers);
+        for (size_t i = 1; i < n_customers; ++i) {
+            m_y.emplace_back(IloIntVarArray(m_env, types_size, 0, 1));
         }
 
         {
@@ -162,7 +169,6 @@ public:
         {
             // Note: double constraints due to volume && weight
             // (1)
-            // TODO: is the function correct?
             int total_volume = 0;
             int total_weight = 0;
             for (const auto& type : types) {
@@ -236,7 +242,6 @@ public:
 
         {
             // (3)
-            // TODO: is this correct?
             IloConstraintArray balancing_constraints(m_env);
             for (size_t t = 0; t < types.size(); ++t) {
                 const auto& vehicles = types[t].vehicles;
@@ -273,6 +278,35 @@ public:
             }
             m_model.add(balancing_constraints);
         }
+
+        {
+            // split delivery constraints
+            IloConstraintArray limit_constraints1(m_env),
+                limit_constraints2(m_env);
+
+            assert(m_x.size() == m_y.size());
+            for (size_t i = 0; i < m_x.size(); ++i) {
+                assert(m_x[i].getSize() == m_y[i].getSize());
+                for (int t = 0; t < m_x[i].getSize(); ++t) {
+                    limit_constraints1.add(m_y[i][t] >= m_x[i][t]);
+                    limit_constraints2.add(
+                        m_y[i][t] <= m_x[i][t] + (1.0 - Problem::split_thr));
+                }
+            }
+            m_model.add(limit_constraints1);
+            m_model.add(limit_constraints2);
+
+            const int split_value = prob.max_splits;
+            IloConstraintArray split_constraints(m_env);
+            for (size_t i = 0; i < m_y.size(); ++i) {
+                IloExpr sum(m_env);
+                for (int t = 0; t < m_y[i].getSize(); ++t) {
+                    sum += m_y[i][t];
+                }
+                split_constraints.add(sum <= split_value);
+            }
+            m_model.add(split_constraints);
+        }
     }
 
     ~Heuristic() { m_algo.end(); }
@@ -307,14 +341,15 @@ public:
     }
 
     /// Get mapping between customer and vehicle type for current solution
-    std::unordered_map<size_t, size_t>
-    get_customer_types(size_t depot_offset = 0) {
+    std::unordered_map<size_t, size_t> get_customer_types(size_t depot_offset) {
         auto assignment_map = this->get_values();
         std::unordered_map<size_t, size_t> mapped_types;
         for (size_t c = 0; c < assignment_map.size(); ++c) {
-            const auto& types = assignment_map[c];
-            auto chosen_type = std::find(types.cbegin(), types.cend(), 1.0);
-            size_t t = std::distance(types.cbegin(), chosen_type);
+            const auto& ratios = assignment_map[c];
+            // TODO: fix this for split case - need to update assignment_cost as
+            //       well then
+            auto chosen_type = std::max_element(ratios.cbegin(), ratios.cend());
+            size_t t = std::distance(ratios.cbegin(), chosen_type);
             mapped_types[c + depot_offset] = t;
         }
         return mapped_types;
@@ -323,7 +358,7 @@ public:
     void update() {
         auto seeds = select_seeds(*this);
         const auto n_customers = m_prob.n_customers();
-        auto customer_to_type = this->get_customer_types();
+        auto customer_to_type = this->get_customer_types(1);
 
         // (9) calculate total minimal insertion cost
         double total_distance = 0.0;
@@ -332,7 +367,7 @@ public:
             for (size_t t = 0; t < allowed.size(); ++t) {
                 if (allowed[t]) {
                     total_distance +=
-                        assignment_cost(seeds.at(customer_to_type[t]), k);
+                        assignment_cost(seeds.at(customer_to_type[k]), k);
                 }
             }
         }
@@ -384,18 +419,121 @@ std::vector<double> calculate_weights(const Problem& prob) {
     return weights;
 }
 
+/// Fix type ratios (split delivery)
+std::vector<double> fix_ratios(const TransportationQuantity& demand,
+                               const std::vector<double>& ratios) {
+    // TODO: simplify algorithm
+
+    // skip non-floating cases - [0, ..., 1.0, ..., 0]
+    if (ratios.cend() != std::find(ratios.cbegin(), ratios.cend(), 1.0)) {
+        return ratios;
+    }
+
+    std::unordered_map<size_t, double> ratio_map;
+    ratio_map.reserve(ratios.size());
+    // insert elements > 0.0
+    for (size_t t = 0, size = ratios.size(); t < size; ++t) {
+        auto r = ratios[t];
+        if (r > 0.0) {
+            ratio_map[t] = r;
+        }
+    }
+
+    assert(demand.volume != 0);
+    assert(demand.volume == demand.weight);
+    const auto volume = demand.volume;
+
+    // construct ratios aligned to demand
+    int start = static_cast<int>(std::ceil(volume * Problem::split_thr));
+    std::vector<double> aligned_ratios;
+    for (; start <= volume; ++start) {
+        aligned_ratios.emplace_back(static_cast<double>(start) / volume);
+    }
+
+    // remember min ratio: "sacrifice" it in a way to properly align numbers
+    auto min = std::min_element(
+        ratio_map.begin(), ratio_map.end(),
+        [](const auto& a, const auto& b) { return a.second < b.second; });
+
+    // find closest value to `e` in the given vector
+    static const auto closest = [](std::vector<double>& values,
+                                   double e) -> double {
+        assert(!values.empty());
+        auto greater_or_equal =
+            std::lower_bound(values.cbegin(), values.cend(), e);
+        if (greater_or_equal == values.cend()) {
+            return *std::prev(values.cend());
+        }
+        if (greater_or_equal == values.cbegin()) {
+            return *greater_or_equal;
+        }
+
+        auto lower = std::prev(greater_or_equal);
+        // if e is closer to lower, return lower. otherwise, return lower_bound
+        if (e - *lower < *greater_or_equal - e) {
+            return *lower;
+        }
+        return *greater_or_equal;
+    };
+
+    // align ratios
+    double sum = 0.0;
+    for (auto& p : ratio_map) {
+        if (p.first == min->first) {
+            continue;
+        }
+        p.second = closest(aligned_ratios, p.second);
+        sum += p.second;
+    }
+    min->second = 1.0 - sum;  // min value is guaranteed to be aligned, because
+                              // other values are already aligned
+
+    {
+        // if one of the elements becomes 1.0, fix all other values to be 0.0
+        auto found_one =
+            std::find_if(ratio_map.cbegin(), ratio_map.cend(),
+                         [](const auto& p) { return p.second == 1.0; });
+        if (found_one != ratio_map.cend()) {
+            for (auto& p : ratio_map) {
+                if (p.first == found_one->first) {
+                    continue;
+                }
+                p.second = 0.0;
+            }
+        }
+    }
+
+    // construct result
+    std::vector<double> fixed_ratios(ratios.size(), 0.0);
+    for (const auto& p : ratio_map) {
+        fixed_ratios[p.first] = p.second;
+    }
+
+    assert(1.0 ==
+           std::accumulate(fixed_ratios.cbegin(), fixed_ratios.cend(), 0.0));
+
+    return fixed_ratios;
+}
+
 /// Get non-constructed groups of customers that belong to the same routes
-std::unordered_map<size_t, std::list<size_t>> group(const Heuristic& h,
-                                                    size_t depot_offset = 0) {
+std::pair<std::unordered_map<size_t, std::list<size_t>>,
+          std::unordered_map<size_t, SplitInfo>>
+group(const Heuristic& h, size_t depot_offset) {
     auto assignment_map = h.get_values();
     std::unordered_map<size_t, std::list<size_t>> routes;
+    std::unordered_map<size_t, SplitInfo> splits;
     for (size_t c = 0; c < assignment_map.size(); ++c) {
-        const auto& types = assignment_map[c];
-        auto chosen_type = std::find(types.cbegin(), types.cend(), 1.0);
-        size_t t = std::distance(types.cbegin(), chosen_type);
-        routes[t].emplace_back(c + depot_offset);
+        auto ratios = fix_ratios(h.prob().customers[c + depot_offset].demand,
+                                 assignment_map[c]);
+        for (size_t t = 0; t < ratios.size(); ++t) {
+            if (ratios[t] == 0.0) {
+                continue;
+            }
+            routes[t].emplace_back(c + depot_offset);
+            splits[c + depot_offset].split_info[t] = ratios[t];
+        }
     }
-    return routes;
+    return std::make_pair(routes, splits);
 }
 
 template<typename T> using mat_t = std::vector<std::vector<T>>;
@@ -449,10 +587,14 @@ get_statistics(const Problem& prob) {
 }
 
 /// Solve basic (capacitated) VRP with insertion heuristic
-std::vector<std::tuple<size_t, size_t, std::list<size_t>>>
+std::pair<std::vector<std::tuple<size_t, size_t, std::list<size_t>>>,
+          std::unordered_map<size_t, SplitInfo>>
 solve_vrp(const Heuristic& h, bool random = false) {
+    std::unordered_map<size_t, std::list<size_t>> typed_customers;
+    std::unordered_map<size_t, SplitInfo> customer_splits;
     // depot_offset = 1 due to depot at index 0:
-    auto typed_customers = group(h, 1);
+    std::tie(typed_customers, customer_splits) = group(h, 1);
+
     const auto& prob = h.prob();
     static constexpr const size_t depot = 0;
     std::unordered_map<size_t, std::list<size_t>> routes{};
@@ -483,6 +625,8 @@ solve_vrp(const Heuristic& h, bool random = false) {
 
     static std::mt19937 g;
     static std::uniform_real_distribution<> dist(0.0, 1.0);
+
+    std::unordered_map<size_t, SplitInfo> splits_by_vehicles;
 
     // Insertion heuristic, variation 2: c1 is not needed (?), c2 is minimized.
     // params of c2:
@@ -522,7 +666,9 @@ solve_vrp(const Heuristic& h, bool random = false) {
                 for (const auto& c : unrouted) {
                     // skip if capacity is exceeded
                     if (!last_vehicle &&
-                        running_capacity < prob.customers[c].demand) {
+                        running_capacity <
+                            prob.customers[c].demand *
+                                customer_splits[c].split_info[t]) {
                         continue;
                     }
                     if (!last_vehicle && random &&
@@ -587,8 +733,13 @@ solve_vrp(const Heuristic& h, bool random = false) {
                         updated_route.insert(std::next(updated_route.cbegin(),
                                                        std::get<2>(*optimal)),
                                              std::get<0>(*optimal));
+                        SplitInfo info = {};
+                        for (size_t c : updated_route) {
+                            info.split_info[c] =
+                                customer_splits[c].split_info[t];
+                        }
                         if (constraints::total_violated_time(
-                                prob, updated_route.cbegin(),
+                                prob, info, updated_route.cbegin(),
                                 updated_route.cend()) == 0) {
                             break;
                         }
@@ -609,11 +760,18 @@ solve_vrp(const Heuristic& h, bool random = false) {
                 route = std::move(updated_route);
                 assert(route.size() > 2);
 
-                running_capacity -= prob.customers[c].demand;
+                running_capacity -=
+                    prob.customers[c].demand * customer_splits[c].split_info[t];
                 nothing_to_add = false;
+
+                // convert types to vehicles in SplitInfo
+                splits_by_vehicles[c].split_info[v] =
+                    customer_splits[c].split_info[t];
             }
         }
     }
+
+    assert(splits_by_vehicles.size() == customer_splits.size() - 1);
 
     // return only real routes (if route consists of <= 2 nodes, it's actually
     // empty - "size 2" stands for in-depot and out-depot)
@@ -627,18 +785,56 @@ solve_vrp(const Heuristic& h, bool random = false) {
         }
     }
 
-    return cleaned_routes;
+    return std::make_pair(cleaned_routes, splits_by_vehicles);
 }
 
 Solution routes_to_sln(
     const Problem& prob,
-    std::vector<std::tuple<size_t, size_t, std::list<size_t>>> routes) {
+    std::pair<std::vector<std::tuple<size_t, size_t, std::list<size_t>>>,
+              std::unordered_map<size_t, SplitInfo>>
+        routes_and_splits) {
+    const auto& routes = routes_and_splits.first;
+    const auto& split_by_vehicles = routes_and_splits.second;
+
     Solution sln;
     sln.routes.reserve(routes.size());
+
+    std::unordered_map<size_t, SplitInfo> splits_by_routes;
     for (auto& values : routes) {
-        sln.routes.emplace_back(std::get<1>(values),
-                                std::move(std::get<2>(values)));
+        const size_t vehicle = std::get<1>(values);
+        sln.routes.emplace_back(vehicle, std::move(std::get<2>(values)));
+
+        // convert vehicles to routes in SplitInfo
+        const size_t rid = sln.routes.size() - 1;  // always last inserted route
+        for (const auto& p : split_by_vehicles) {
+            if (!p.second.has(vehicle)) {
+                continue;
+            }
+            splits_by_routes[p.first].split_info[rid] =
+                p.second.split_info.at(vehicle);
+        }
     }
+
+    // if split delivery is disabled, do not set split info
+    if (!prob.enable_splits()) {
+        return sln;
+    }
+
+    assert(splits_by_routes.size() == split_by_vehicles.size());
+
+    // transform <customer: SplitInfo{route, ratio}> into
+    // <route: SplitInfo{customer, ratio}>
+    SplitInfo depot_info = {};
+    depot_info.split_info[0] = 1.0;
+    sln.route_splits.resize(sln.routes.size(), depot_info);
+    for (const auto& customer_and_splits : splits_by_routes) {
+        auto c = customer_and_splits.first;
+        const auto& info = customer_and_splits.second;
+        for (const auto& e : info.split_info) {
+            sln.route_splits[e.first].split_info[c] = e.second;
+        }
+    }
+
     return sln;
 }
 
@@ -650,7 +846,7 @@ select_seeds(const Heuristic& h) {
 
     // the customer on the route with the largest seed weight becomes the seed
     // point of the route
-    auto routes = solve_vrp(h);
+    auto routes = solve_vrp(h).first;  // TODO: can ignore splits here?
     // TODO: in fact, we don't need routes...
     for (auto& vehicle_route : routes) {
         auto& route = std::get<2>(vehicle_route);

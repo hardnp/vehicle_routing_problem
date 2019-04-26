@@ -3,6 +3,35 @@
 #include <cassert>
 
 namespace vrp {
+void transfer_split_entry(bool enable_splits, SplitInfo& src, SplitInfo& dst,
+                          size_t key) {
+    // do nothing if splits are disabled
+    if (!enable_splits) {
+        return;
+    }
+
+    // do nothing for depot case
+    static constexpr const size_t depot = 0;
+    if (key == depot) {
+        return;
+    }
+
+    // the key shouldn't exist in dst
+    if (dst.has(key)) {
+        throw std::runtime_error("given key exists in dst already");
+    }
+
+    auto& src_info = src.split_info;
+    auto& dst_info = dst.split_info;
+
+    auto src_it = src_info.find(key);
+    if (src_info.cend() == src_it) {
+        throw std::out_of_range("given key is not in src");
+    }
+    dst_info.emplace(src_it->first, src_it->second);
+    src_info.erase(src_it);
+}
+
 void Solution::update_times(const Problem& prob) {
     this->times.clear();
 
@@ -44,6 +73,8 @@ void Solution::update_times(const Problem& prob) {
 
 void Solution::update_customer_owners(const Problem& prob) {
     customer_owners.resize(prob.n_customers());  // TODO: free on same size?
+    const auto empty_hash_map = std::unordered_map<size_t, size_t>{};
+    std::fill(customer_owners.begin(), customer_owners.end(), empty_hash_map);
 
     const auto size = routes.size();
     for (size_t ri = 0; ri < size; ++ri) {
@@ -51,17 +82,21 @@ void Solution::update_customer_owners(const Problem& prob) {
     }
 }
 
-// FIXME: use last parameter
 void Solution::update_customer_owners(const Problem& prob, size_t route_index,
-                                      size_t) {
+                                      size_t first_customer_index) {
     // expect allocated at this point
     assert(customer_owners.size() == prob.n_customers());
 
     const auto& route = routes[route_index].second;
-    size_t i = 0;
-    for (CustomerIndex customer : route) {
-        customer_owners[customer] = std::make_pair(route_index, i);
-        ++i;
+    auto first = std::next(route.cbegin(), first_customer_index);
+    for (size_t i = first_customer_index; first != route.cend(); ++first, ++i) {
+        // skip depot
+        if (*first == 0) {
+            continue;
+        }
+        customer_owners[*first][route_index] = i;
+        assert(customer_owners[*first].size() <=
+               static_cast<size_t>(prob.max_splits));
     }
 }
 
@@ -84,6 +119,4 @@ bool Solution::operator==(const Solution& other) const {
     }
     return true;
 }
-
-Solution::operator bool() { return this->routes.empty(); }
 }  // namespace vrp

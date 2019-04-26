@@ -25,10 +25,10 @@ bool site_dependent(const Problem& prob, size_t vehicle, size_t customer) {
 int total_violated_time(const Problem& prob, const Solution& sln) {
     int violated_time = 0;
 
-    for (const auto& vehicle_and_route : sln.routes) {
-        const auto& route = vehicle_and_route.second;
-        violated_time +=
-            total_violated_time(prob, route.cbegin(), route.cend());
+    for (size_t t = 0, size = sln.routes.size(); t < size; ++t) {
+        const auto& route = sln.routes[t].second;
+        violated_time += total_violated_time(prob, sln.route_splits.at(t),
+                                             route.cbegin(), route.cend());
     }
 
     return violated_time;
@@ -39,11 +39,13 @@ TransportationQuantity total_violated_capacity(const Problem& prob,
     TransportationQuantity violated_capacity = {};
 
     const auto& vehicles = prob.vehicles;
-    for (const auto& vehicle_and_route : sln.routes) {
+    for (size_t t = 0, size = sln.routes.size(); t < size; ++t) {
+        const auto& vehicle_and_route = sln.routes[t];
         size_t v = vehicle_and_route.first;
         const auto& route = vehicle_and_route.second;
         violated_capacity += total_violated_capacity(
-            prob, vehicles[v].capacity, route.cbegin(), route.cend());
+            prob, vehicles[v].capacity, sln.route_splits.at(t), route.cbegin(),
+            route.cend());
     }
 
     return violated_capacity;
