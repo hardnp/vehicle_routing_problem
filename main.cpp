@@ -98,7 +98,8 @@ int main(int argc, char* argv[]) {
 
     // only use initial heuristics that solve split delivery problem
     if (problem.enable_splits()) {
-        initial_heuristics = {vrp::InitialHeuristic::ClusterFirstRouteSecond};
+        initial_heuristics = {vrp::InitialHeuristic::ClusterFirstRouteSecond,
+                              vrp::InitialHeuristic::Savings};
     }
 
     std::vector<vrp::Solution> solutions = {};
