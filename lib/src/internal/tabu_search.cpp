@@ -196,12 +196,6 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
 
         --lists;
 
-        // if nothing was improved, continue
-        if (std::all_of(was_improved.cbegin(), was_improved.cend(),
-                        [](bool v) { return !v; })) {
-            continue;
-        }
-
         update_tabu_lists(lists, updated_lists,
                           std::distance(slns.cbegin(), min_sln_it));
 

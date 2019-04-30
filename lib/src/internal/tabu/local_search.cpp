@@ -746,6 +746,14 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
                 std::tie(r_out, c_out) = *cfirst2;
                 validate_indices(r_out, c_out, sln.routes);
                 auto& route_out = sln.routes[r_out].second;
+
+                // if out route has only 3 nodes, the situation is like that:
+                // route_out: 0 -> customer -> 0
+                // in such scenario, relocate_split is not applicable
+                if (route_out.size() <= 3) {
+                    continue;
+                }
+
                 if (is_loop(route_out)) {
                     continue;
                 }
