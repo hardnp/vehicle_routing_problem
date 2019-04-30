@@ -266,7 +266,7 @@ def write_table_vehicles(io_stream, tables):
         table_entry.append(values[1])  # volume
         table_entry.append(values[1])  # weight
         table_entry.append(values[-1])  # fixed cost
-        table_entry.append(0)  # TODO: variable cost
+        table_entry.append(1)
         io_stream.write(';'.join(to_str(table_entry)) + '\n')
 
 
@@ -314,7 +314,6 @@ def write_max_violated_soft_tw(io_stream):
 
 def write_max_splits(io_stream, max_splits):
     """Write max number of splits per customer into provided stream"""
-    # TODO: use dynamic value?
     io_stream.write('value max_splits\n')
     io_stream.write('{value}\n'.format(value=max_splits))
 
