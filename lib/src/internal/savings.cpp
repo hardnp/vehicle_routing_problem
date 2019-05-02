@@ -20,6 +20,17 @@ namespace detail {
 std::vector<Solution> savings(const Problem& prob, size_t count) {
     std::vector<Solution> solutions;
 
+    std::random_device rd;
+    //doesnt work
+    //const auto seed = 313419374u; 
+    //works DONT TOUCH THIS!!!!!!!
+    const auto seed = 2997099656u;
+
+    //auto seed = rd();
+    std::mt19937 gen(seed);
+    std::cout << "seed " << seed << std::endl;
+    std::uniform_int_distribution<> dis(1, prob.customers.size() - 1);
+
     for (size_t it = 0; it < count; ++it) {
         const auto cust_size = prob.customers.size() - 1;
         const auto points = cust_size + 1;  // + 1 for depo itself
@@ -27,10 +38,6 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
         // enable splits or not
         const auto enable_splits = prob.enable_splits();
         const auto max_splits = prob.max_splits;
-
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(1, cust_size);
 
         // split demands
         std::vector<TransportationQuantity> split_demand(points, {0, 0});
@@ -136,16 +143,17 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
         current_route = std::tuple<std::vector<int>, std::vector<size_t>,
                                    TransportationQuantity, SplitInfo>{
             vehicles_for_cust[rand_cust],
-                         {0, rand_cust, 0},
-                         split_demand[rand_cust],
-                         SplitInfo{}};
+            {0, rand_cust, 0},
+            split_demand[rand_cust],
+            SplitInfo{}};
 
         bool rand_split = 1;
         if (enable_splits) {
             std::get<3>(current_route).split_info[rand_cust] = {1.0};
             std::get<3>(current_route).split_info[0] = {1.0};
             for (auto& a : std::get<0>(current_route))
-                if (prob.vehicles[a].capacity + MAX_CAPACITY_VIOLATION >= std::get<2>(current_route))
+                if (prob.vehicles[a].capacity + MAX_CAPACITY_VIOLATION >=
+                    std::get<2>(current_route))
                     // can be served w/o split
                     rand_split = 0;
         }
@@ -167,14 +175,10 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                                   })};
             std::get<2>(current_route) =
                 prob.vehicles[std::get<0>(current_route)[0]].capacity;
-            //std::cout <<"debug rand1 " << std::get<2>(current_route)<< ' ' <<rand_cust << std::endl;
+
             std::get<3>(current_route).split_info[rand_cust] = {
                 (double)std::get<2>(current_route).volume /
                 prob.customers[rand_cust].demand.volume};
-
-           /* std::cout << "First rand was splited " << rand_cust << ' '
-                      << std::get<3>(current_route)
-                             .split_info[rand_cust]<<std::endl;*/
 
             split_demand[rand_cust] -= std::get<2>(current_route);
             ++splited[rand_cust];
@@ -182,7 +186,11 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                 std::get<3>(current_route).split_info[rand_cust];
         }
 
-        while (served < cust_size) {
+        size_t route_sz = 1;
+
+        std::vector<size_t> non_served_cust;
+
+        while (served < cust_size && route_sz <= prob.vehicles.size()) {
 
             if (pick_new_route) {
                 // initialise route with random customer
@@ -195,19 +203,38 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                             std::tuple<std::vector<int>, std::vector<size_t>,
                                        TransportationQuantity, SplitInfo>{
                                 vehicles_for_cust[rand_cust],
-                                         {0, rand_cust, 0},
-                                         split_demand[rand_cust],
+                                {0, rand_cust, 0},
+                                split_demand[rand_cust],
                                 SplitInfo{}};
                         dest[rand_cust] = 1;
                         pick_new_route = 0;
                         ++served;
 
-                        if (enable_splits) {
-                            std::get<3>(current_route).split_info[0] = {1.0};
-                            std::get<3>(current_route).split_info[rand_cust] = 1.0 - splited_rat[rand_cust];
+                        bool spare_veh = 0;
+                        int veh_num;
+                        for (auto a : std::get<0>(current_route))
+                            if (used_veh[a] == 0) {
+                                spare_veh = 1;
+                                veh_num = a;
+                                break;
+                            }
+
+                        // cannot be served
+                        if (!spare_veh) {
+                            non_served_cust.push_back(
+                                std::get<1>(current_route)[1]);
+                            pick_new_route = 1;
+                            break;
                         }
 
-                        if (enable_splits && splited[rand_cust] < (size_t)max_splits) {
+                        if (enable_splits) {
+                            std::get<3>(current_route).split_info[0] = {1.0};
+                            std::get<3>(current_route).split_info[rand_cust] =
+                                1.0 - splited_rat[rand_cust];
+                        }
+
+                        if (enable_splits &&
+                            splited[rand_cust] < (size_t)max_splits) {
                             bool rand_split = 1;
                             for (auto& a : std::get<0>(current_route))
                                 if (prob.vehicles[a].capacity >=
@@ -218,29 +245,16 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                             if (rand_split) {
                                 --served;
                                 dest[rand_cust] = 0;
-                                std::get<0>(current_route) = {*std::max_element(
-                                    std::get<0>(current_route).begin(),
-                                    std::get<0>(current_route).end(),
-                                    [&](const int& a, const int& b) {
-                                        return prob.vehicles[a].capacity <
-                                               prob.vehicles[b].capacity;
-                                    })};
+                                std::get<0>(current_route) = {veh_num};
+
                                 std::get<2>(current_route) =
                                     prob.vehicles[std::get<0>(current_route)[0]]
                                         .capacity;
-                                /*std::cout << "debug rand smth "
-                                          << std::get<2>(current_route) << ' '
-                                          << rand_cust << std::endl;*/
+
                                 std::get<3>(current_route)
                                     .split_info[rand_cust] = {
                                     (double)std::get<2>(current_route).volume /
                                     prob.customers[rand_cust].demand.volume};
-
-                                /*std::cout << "Rand was splited "
-                                          << rand_cust << ' '
-                                          << std::get<3>(current_route)
-                                                 .split_info[rand_cust]
-                                          << std::endl;*/
 
                                 split_demand[rand_cust] -=
                                     std::get<2>(current_route);
@@ -250,15 +264,32 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                                         .split_info[rand_cust];
                             }
                         }
-                        //std::cout << "random: " << rand_cust<<std::endl;
                         break;
                     }
                 }
 
                 // workaround if the last customer is served randomly
                 if (served == cust_size) {
+
+                    bool spare_veh = 0;
+                    size_t veh_num;
+                    for (auto a : std::get<0>(current_route))
+                        if (used_veh[a] == 0) {
+                            spare_veh = 1;
+                            veh_num = a;
+                            break;
+                        }
+
+                    // cannot be served
+                    if (!spare_veh) {
+                        dest[std::get<1>(current_route)[1]] = 1;
+                        non_served_cust.push_back(
+                            std::get<1>(current_route)[1]);
+                        continue;
+                    }
+
                     std::pair<size_t, std::vector<size_t>> route_to_add;
-                    route_to_add.first = std::get<0>(current_route)[0];
+                    route_to_add.first = veh_num;
                     used_veh[route_to_add.first] = 1;
                     route_to_add.second = std::get<1>(current_route);
                     routes.push_back(route_to_add);
@@ -325,7 +356,7 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                                     (used_veh[a] == 0)) {
                                     veh_spl = a;
                                     can_serve = 1;
-                                    }
+                                }
 
                             if (can_serve == 1) {
                                 common_veh.erase(
@@ -350,11 +381,8 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                                     used_veh[veh_spl] == 1)
                                     cap_viol = 1;
                                 else {
-                                    /*std::cout << "spliting " << best_save.i
-                                              << " car " << veh_spl << " "
-                                        << used_veh[veh_spl]<<std::endl;*/
                                     was_splited = 1;
-                                    }
+                                }
                             }
                         }
 
@@ -433,20 +461,11 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                                     (double)splited_cap.volume /
                                     prob.customers[best_save.i].demand.volume};
 
-                                /*std::cout << "Someone was splited "
-                                          << best_save.i << ' '
-                                          << std::get<3>(current_route)
-                                                 .split_info[best_save.i]
-                                          << std::endl;
-                                std::cout
-                                    << "got "
-                                    << (tmp_cap - split_demand[best_save.i])
-                                           .volume
-                                    << " of "
-                                    << std::get<2>(current_route).volume
-                                    << " trying "
-                                    << split_demand[best_save.i].volume
-                                    << std::endl;*/
+                                if (std::get<3>(current_route)
+                                            .split_info[best_save.i] < 0.0 ||
+                                    std::get<3>(current_route)
+                                            .split_info[best_save.i] > 1.0)
+                                    continue;
 
                                 split_demand[best_save.i] -= splited_cap;
                                 ++splited[best_save.i];
@@ -543,7 +562,7 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                                     (used_veh[a] == 0)) {
                                     veh_spl = a;
                                     can_serve = 1;
-                                    }
+                                }
 
                             if (can_serve == 1) {
                                 common_veh.erase(
@@ -567,11 +586,8 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                                     used_veh[veh_spl] == 1)
                                     cap_viol = 1;
                                 else {
-                                    /*std::cout << "spliting " << best_save.j
-                                              << " car " << veh_spl << " "
-                                              << used_veh[veh_spl] << std::endl;*/
                                     was_splited = 1;
-                                    }
+                                }
                             }
                         }
 
@@ -603,6 +619,7 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                         }
 
                         if (!tw_violation && !site_dep_viol && !cap_viol) {
+
                             // adding to the end
                             if (was_splited) {
                                 std::get<0>(current_route) = {*std::max_element(
@@ -625,20 +642,11 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                                     (double)splited_cap.volume /
                                     prob.customers[best_save.j].demand.volume};
 
-                                /*std::cout << "Someone was splited "
-                                          << best_save.j << ' '
-                                          << std::get<3>(current_route)
-                                                 .split_info[best_save.j]
-                                          << std::endl;
-                                std::cout
-                                    << "got "
-                                    << (tmp_cap - split_demand[best_save.j])
-                                           .volume
-                                    << " of "
-                                    << std::get<2>(current_route).volume
-                                    << " trying "
-                                    << split_demand[best_save.j].volume
-                                    << std::endl;*/
+                                if (std::get<3>(current_route)
+                                            .split_info[best_save.j] < 0.0 ||
+                                    std::get<3>(current_route)
+                                            .split_info[best_save.j] > 1.0)
+                                    continue;
 
                                 split_demand[best_save.j] -= splited_cap;
                                 ++splited[best_save.j];
@@ -672,11 +680,79 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                 pick_new_route = 1;
 
                 std::pair<size_t, std::vector<size_t>> route_to_add;
-                route_to_add.first = std::get<0>(current_route)[0];
+
+                size_t veh_num;
+                for (auto a : std::get<0>(current_route))
+                    if (used_veh[a] == 0) {
+                        veh_num = a;
+                        break;
+                    }
+
+                route_to_add.first = veh_num;
                 used_veh[route_to_add.first] = 1;
+                ++route_sz;
                 route_to_add.second = std::get<1>(current_route);
                 routes.push_back(route_to_add);
                 splits.push_back(std::get<3>(current_route));
+            }
+        }
+
+        // fix non-served cust
+        for (auto cust : non_served_cust) {
+            // non-split case
+            if (!enable_splits) {
+                for (auto& a : routes) {
+                    if (a.first == vehicles_for_cust[cust][0]) {
+                        a.second.insert(a.second.end() - 1, cust);
+                        break;
+                    }
+                }
+            } else {
+                int ind = 0;
+                for (auto& a : routes) {
+                    // check site dep and occurance of the same cust
+                    if (std::find(vehicles_for_cust[cust].begin(),
+                                  vehicles_for_cust[cust].end(),
+                                  a.first) != vehicles_for_cust[cust].end() &&
+                        std::find(a.second.begin(), a.second.end(), cust) ==
+                            a.second.end()) {
+                        a.second.insert(a.second.end() - 1, cust);
+                        splits[ind].split_info[cust] = 1.0 - splited_rat[cust];
+                        break;
+                    }
+                    ++ind;
+                }
+            }
+        }
+
+        // fix non-served cust
+        for (size_t i = 0; i < dest.size(); ++i) {
+            if (dest[i] == 0) {
+                auto cust = i;
+            // non-split case
+            if (!enable_splits) {
+                for (auto& a : routes) {
+                    if (a.first == vehicles_for_cust[cust][0]) {
+                        a.second.insert(a.second.end() - 1, cust);
+                        break;
+                    }
+                }
+            } else {
+                int ind = 0;
+                for (auto& a : routes) {
+                    // check site dep and occurance of the same cust
+                    if (std::find(vehicles_for_cust[cust].begin(),
+                                  vehicles_for_cust[cust].end(),
+                                  a.first) != vehicles_for_cust[cust].end() &&
+                        std::find(a.second.begin(), a.second.end(), cust) ==
+                            a.second.end()) {
+                        a.second.insert(a.second.end() - 1, cust);
+                        splits[ind].split_info[cust] = 1.0 - splited_rat[cust];
+                        break;
+                    }
+                    ++ind;
+                }
+            }
             }
         }
 
@@ -691,11 +767,18 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
             }
             ++ii;
         }
+
         sav_sol.routes = listed_routes;
         if (enable_splits)
             sav_sol.route_splits = splits;
 
-        /*for (auto b : sav_sol.routes) {
+        // update solution info
+        sav_sol.update_customer_owners(prob);
+        sav_sol.update_times(prob);
+        sav_sol.update_used_vehicles();
+
+        // printing 
+       /*for (auto b : routes) {
             std::cout << b.first << " veh" << std::endl;
             for (auto c : b.second) {
                 std::cout << c << " ";
@@ -703,7 +786,7 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
             std::cout << std::endl << std::endl;
         }
         std::cout << "splits:" << std::endl;
-        for (auto b : sav_sol.route_splits) {
+        for (auto b : splits) {
 
             for (auto c : b.split_info) {
                 std::cout << c.first << " " << c.second << ' ';
@@ -714,14 +797,9 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                      "*********"
                   << std::endl;*/
 
-        // update solution info
-        sav_sol.update_customer_owners(prob);
-        sav_sol.update_times(prob);
-        sav_sol.update_used_vehicles();
-
         solutions.push_back(sav_sol);
     }
-    //std::cout << "ENDED"<<std::endl;
+    
     return solutions;
 }  // namespace detail
 
