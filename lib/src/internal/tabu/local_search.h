@@ -21,6 +21,7 @@ class LocalSearchMethods {
     double m_tw_penalty = 0.0;      ///< penalty for time windows violation
     bool m_can_violate_tw = false;  ///< flag to specify if TW can be violated
     bool m_enable_splits = false;   ///< flag to enable split delivery
+    size_t m_bad_moves_iters = 0;  ///< allow bad moves in search for some iters
     SplitInfo m_default_split_info = {};  ///< default split info
 
     bool m_explore_all_neighbourhoods =
@@ -57,6 +58,10 @@ public:
     // time windows management:
     void penalize_tw(double value);
     void violate_tw(bool value);
+
+    // bad moves management:
+    void allow_bad_moves_for(size_t iters);
+    void step();
 };
 }  // namespace tabu
 }  // namespace vrp

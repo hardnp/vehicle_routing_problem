@@ -540,7 +540,6 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists,
 
                     const auto out_capacity =
                         m_prob.vehicles[sln.routes[r_out].first].capacity;
-                    impossible_move |= (out_demand_after > out_capacity);
 
                     impossible_move |=
                         (!m_can_violate_tw &&
@@ -548,8 +547,15 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists,
                               m_prob, split_out, route_out.cbegin(),
                               route_out.cend()) != 0));
 
+                    const bool capacity_violated =
+                        out_demand_after > out_capacity;
+
+                    const bool good_move =
+                        (!capacity_violated && cost_after < cost_before) ||
+                        m_bad_moves_iters > 0;
+
                     // decide whether move is good
-                    if (!impossible_move && cost_after < cost_before) {
+                    if (!impossible_move && good_move) {
                         // move is good
                         sln.customer_owners[customer].erase(r_in);
                         sln.update_customer_owners(m_prob, r_in, c_index);
@@ -1039,10 +1045,6 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
                             m_prob.vehicles[sln.routes[r1].first].capacity,
                         route2_capacity =
                             m_prob.vehicles[sln.routes[r2].first].capacity;
-                    impossible_move |= (demand1_after > route1_capacity &&
-                                        demand1_after > demand1_before);
-                    impossible_move |= (demand2_after > route2_capacity &&
-                                        demand2_after > demand2_before);
 
                     impossible_move |= (!m_can_violate_tw &&
                                         (constraints::total_violated_time(
@@ -1052,8 +1054,18 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
                                              m_prob, split2, route2.cbegin(),
                                              route2.cend()) != 0));
 
+                    bool capacity_violated = false;
+                    capacity_violated |= (demand1_after > route1_capacity &&
+                                          demand1_after > demand1_before);
+                    capacity_violated |= (demand2_after > route2_capacity &&
+                                          demand2_after > demand2_before);
+
+                    const bool good_move =
+                        (!capacity_violated && cost_after < cost_before) ||
+                        m_bad_moves_iters > 0;
+
                     // decide whether move is good
-                    if (!impossible_move && cost_after < cost_before) {
+                    if (!impossible_move && good_move) {
                         // move is good
                         sln.customer_owners[customer].erase(r1);
                         sln.customer_owners[neighbour].erase(r2);
@@ -1130,8 +1142,11 @@ bool LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists,
                                              m_prob, split, route.cbegin(),
                                              route.cend()) != 0));
 
+                    const bool good_move =
+                        cost_after < cost_before || m_bad_moves_iters > 0;
+
                     // decide whether move is good
-                    if (!impossible_move && cost_after < cost_before) {
+                    if (!impossible_move && good_move) {
                         // move is good
                         found_new_best = true;
                         // forbid previously existing edges
@@ -1282,11 +1297,6 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
                         route2_capacity =
                             m_prob.vehicles[sln.routes[r2].first].capacity;
 
-                    impossible_move |= (demand1_after > route1_capacity &&
-                                        demand1_after > demand1_before);
-                    impossible_move |= (demand2_after > route2_capacity &&
-                                        demand2_after > demand2_before);
-
                     impossible_move |= (!m_can_violate_tw &&
                                         (constraints::total_violated_time(
                                              m_prob, split1, route1.cbegin(),
@@ -1295,8 +1305,18 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
                                              m_prob, split2, route2.cbegin(),
                                              route2.cend()) != 0));
 
+                    bool capacity_violated = false;
+                    capacity_violated |= (demand1_after > route1_capacity &&
+                                          demand1_after > demand1_before);
+                    capacity_violated |= (demand2_after > route2_capacity &&
+                                          demand2_after > demand2_before);
+
+                    const bool good_move =
+                        (!capacity_violated && cost_after < cost_before) ||
+                        m_bad_moves_iters > 0;
+
                     // decide whether move is good
-                    if (!impossible_move && cost_after < cost_before) {
+                    if (!impossible_move && good_move) {
                         // move is good
                         for (size_t c1 : customers1) {
                             sln.customer_owners[c1].erase(r1);
@@ -1656,5 +1676,13 @@ void LocalSearchMethods::merge_splits(Solution& sln) {
 
 void LocalSearchMethods::penalize_tw(double value) { m_tw_penalty = value; }
 void LocalSearchMethods::violate_tw(bool value) { m_can_violate_tw = value; }
+void LocalSearchMethods::allow_bad_moves_for(size_t value) {
+    m_bad_moves_iters = value;
+}
+void LocalSearchMethods::step() {
+    if (m_bad_moves_iters) {
+        --m_bad_moves_iters;
+    }
+}
 }  // namespace tabu
 }  // namespace vrp

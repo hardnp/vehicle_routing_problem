@@ -33,6 +33,8 @@ constexpr const uint32_t CONSTRAINTS_FIX_ITERS = 0.1 * TABU_SEARCH_ITERS;
 
 constexpr const uint32_t MAX_VIOLATION_ITERS = 3;
 
+constexpr const uint32_t SEARCH_SEQ_BAD_MOVES_ITERS = TABU_SEARCH_ITERS * 0.05;
+
 void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
                        size_t i) {
     switch (i) {
@@ -74,13 +76,14 @@ uint32_t threshold(const Problem& prob) {
     return std::max(1u, static_cast<uint32_t>(prob.n_customers() * 0.05)) + 2u;
 }
 
-inline void do_local_search(const tabu::LocalSearchMethods& ls,
+inline void do_local_search(tabu::LocalSearchMethods& ls,
                             std::vector<Solution>& slns, tabu::TabuLists& lists,
                             std::vector<bool>& was_improved) {
     assert(slns.size() == ls.size());
     for (size_t m = 0, size = ls.size(); m != size; ++m) {
         was_improved[m] = ls[m](slns[m], lists);
     }
+    ls.step();
 }
 
 inline std::vector<Solution> repeat(const Solution& sln, size_t times) {
@@ -179,6 +182,18 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
 #endif
 
         auto updated_lists = lists;
+        // allow bad moves on last iteration: no improvement is expected at this
+        // moment, can safely try to change current search space
+        if (i > TABU_SEARCH_ITERS - 1 &&
+            std::all_of(was_improved.cbegin(), was_improved.cend(),
+                        [](bool v) { return !v; })) {
+            // allow bad moves for several consecutive iterations
+            ls.allow_bad_moves_for(SEARCH_SEQ_BAD_MOVES_ITERS);
+            // reset search iterations
+            i = 0;
+            // reset tabu lists
+            updated_lists = {};
+        }
         do_local_search(ls, slns, updated_lists, was_improved);
 
         auto min_sln_it = min_element(slns, was_improved);
