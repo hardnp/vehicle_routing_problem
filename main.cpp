@@ -164,7 +164,7 @@ int main(int argc, char* argv[]) {
 
     if (print_debug_info) {
         print_main_info(problem, best_sln, "Improved");
-        print_fmt(objective(problem, best_sln),
+        print_fmt(cost_function(problem, best_sln),
                   vrp::constraints::total_violated_time(problem, best_sln),
                   vrp::constraints::total_violated_capacity(problem, best_sln));
     }
