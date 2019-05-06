@@ -282,7 +282,7 @@ find_closest(const Problem& prob, Solution& sln, size_t src_id, size_t dst_id,
     }
 
     if (closest_pairs.empty()) {
-        return std::make_pair(src_end, dst_end);
+        return std::make_pair(src.end(), dst.end());
     }
 
     // find closest pair of (src, dst) nodes in existing
@@ -324,7 +324,7 @@ find_closest(const Problem& prob, Solution& sln, size_t src_id,
     }
 
     if (closest_pairs.empty()) {
-        return std::make_pair(src_end, node_it);
+        return std::make_pair(src.end(), node_it);
     }
 
     // find closest pair of (src, dst) nodes in existing
@@ -794,8 +794,7 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
                     std::tie(neighbour_it_in, neighbour_it_out) =
                         find_closest(m_prob, sln, r_out, r_in, customer);
                 }
-                if (neighbour_it_in == route_out.end() ||
-                    neighbour_it_out == route_in.end()) {
+                if (neighbour_it_in == route_out.end()) {
                     continue;
                 }
 
