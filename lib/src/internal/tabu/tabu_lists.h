@@ -18,7 +18,7 @@
 
 namespace vrp {
 namespace tabu {
-#define USE_HASH_SET 1
+#define USE_HASH_SET 0
 
 namespace detail {
 template<typename T, int Tenure> struct Entry : public T {

@@ -24,13 +24,14 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 
     std::random_device rd;
     // one of these should work
+    const auto seed = 3695650273u;  // 1488
     // const auto seed = 1734553445u; //1330
     // const auto seed = 4241856268u; //1330
     // const auto seed = 1176554214u; //1585
     // const auto seed = 2386544644u; //1330
     // const auto seed = 2429677703u; //1488
 
-    auto seed = rd();
+    //auto seed = rd();
 
     std::mt19937 gen(seed);
     std::uniform_int_distribution<> dis(1, cust_size);
@@ -729,7 +730,7 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 
         // fix non-served cust
         for (auto cust : non_served_cust) {
-             //std::cout << "non-served "<<cust<<std::endl;
+            // std::cout << "non-served "<<cust<<std::endl;
             // non-split case
             if (!enable_splits) {
                 for (auto& a : routes) {
@@ -759,7 +760,7 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
         // fix non-served cust
         for (size_t i = 1; i < dest.size(); ++i) {
             if (dest[i] == 0) {
-                 //std::cout << "didn't serve " << i << std::endl;
+                // std::cout << "didn't serve " << i << std::endl;
                 auto cust = i;
                 // non-split case
                 if (!enable_splits) {
@@ -821,7 +822,7 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 
                                     inf = splits[ind].split_info[cst];
                                     splits[ind].split_info.erase(cst);
-                                    
+
                                     us = 1;
                                     break;
                                 }
@@ -862,7 +863,6 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
         if (enable_splits)
             sav_sol.route_splits = splits;
 
-
         // update solution info
         sav_sol.update_customer_owners(prob);
         sav_sol.update_times(prob);
@@ -890,7 +890,7 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 
         solutions.push_back(sav_sol);
     }
-
+    //std::cout << seed << std::endl;
     return solutions;
 }  // namespace detail
 

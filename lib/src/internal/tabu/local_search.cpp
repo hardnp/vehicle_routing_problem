@@ -1,5 +1,5 @@
-#include "local_search.h"
 #include "constraints.h"
+#include "local_search.h"
 #include "objective.h"
 
 #include "logging.h"
@@ -422,10 +422,17 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists,
     // small ones are usually "outliers", big ones are "cluster centers"
     for (size_t customer : ascending_sort_customers) {
         bool skip_to_next_customer = false;
-        auto cfirst = sln.customer_owners[customer].cbegin(),
-             clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst != clast; ++cfirst) {
+        auto cfirst = sln.customer_owners[customer].begin(),
+             clast = sln.customer_owners[customer].end();
+        int i = -1;
+        for (; !skip_to_next_customer && cfirst != clast &&
+               i < sln.customer_owners[customer].size() - 1;
+             ++i, cfirst = sln.customer_owners[customer].begin(),
+             std::advance(cfirst, i)) {
+            if (cfirst == clast)
+                break;
             size_t r_in = 0, c_index = 0;
+
             std::tie(r_in, c_index) = *cfirst;
             validate_indices(r_in, c_index, sln.routes);
             auto& route_in = sln.routes[r_in].second;
@@ -709,6 +716,7 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists,
 
 bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
                                         size_t method_id) {
+
     if (!m_prob.enable_splits()) {
         return false;
     }
@@ -731,7 +739,13 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
         bool skip_to_next_customer = false;
         auto cfirst1 = sln.customer_owners[customer].cbegin(),
              clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst1 != clast; ++cfirst1) {
+        int i = -1;
+        for (; !skip_to_next_customer && cfirst1 != clast &&
+               i < sln.customer_owners[customer].size()-1;
+             ++i, cfirst1 = sln.customer_owners[customer].begin(),
+                  std::advance(cfirst1, i)) {
+            if (cfirst1 == clast)
+                break;
             size_t r_in = 0, c_in = 0;
             std::tie(r_in, c_in) = *cfirst1;
             validate_indices(r_in, c_in, sln.routes);
@@ -742,6 +756,7 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
                 if (cfirst1 == cfirst2) {
                     continue;
                 }
+
                 size_t r_out = 0, c_out = 0;
                 std::tie(r_out, c_out) = *cfirst2;
                 validate_indices(r_out, c_out, sln.routes);
@@ -771,6 +786,8 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
                                       route_out.cbegin(), route_out.cend());
 
                 // erase split customer from route_in -> perform split merge
+                if (!split_in.has(customer) || !split_out.has(customer))
+                    continue;
                 auto erased_ratio = split_in.at(customer);
 
                 split_in.split_info.erase(customer);
@@ -801,10 +818,15 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
 
                 // decide where to put new node: before closest or after
                 size_t neighbour = *neighbour_it_in;
+
                 if (loop_occured) {
                     // if route_in is loop, there's only one possibility
                     route_in.insert(std::next(neighbour_it_out), neighbour);
                 } else {
+                    if (std::next(neighbour_it_out) == route_in.end() ||
+                        neighbour_it_out == route_in.begin())
+                        continue;
+
                     const auto before_value =
                         m_prob.costs[neighbour][*std::prev(neighbour_it_out)];
                     const auto after_value =
@@ -946,7 +968,11 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
         bool skip_to_next_customer = false;
         auto cfirst = sln.customer_owners[customer].cbegin(),
              clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst != clast; ++cfirst) {
+        int i = -1;
+        for (; !skip_to_next_customer && cfirst != clast &&
+               i < sln.customer_owners[customer].size() - 1;
+             ++i, cfirst = sln.customer_owners[customer].begin(),
+                  std::advance(cfirst, i)) {
             size_t r1 = 0, c_index = 0;
             std::tie(r1, c_index) = *cfirst;
             validate_indices(r1, c_index, sln.routes);
@@ -965,7 +991,12 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
 
                 auto nfirst = sln.customer_owners[neighbour].cbegin(),
                      nlast = sln.customer_owners[neighbour].cend();
-                for (; !skip_to_next_customer && nfirst != nlast; ++nfirst) {
+                int i = -1;
+                for (; !skip_to_next_customer && nfirst != nlast;
+                     ++i, nfirst = sln.customer_owners[neighbour].begin(),
+                          std::advance(nfirst, i)) {
+                    if (nfirst == nlast)
+                        break;
                     size_t r2 = 0, n_index = 0;
                     std::tie(r2, n_index) = *nfirst;
                     validate_indices(r2, n_index, sln.routes);
@@ -1575,7 +1606,13 @@ void LocalSearchMethods::merge_splits(Solution& sln) {
         bool skip_to_next_customer = false;
         auto cfirst1 = sln.customer_owners[customer].cbegin(),
              clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst1 != clast; ++cfirst1) {
+        int i = - 1;
+        for (; !skip_to_next_customer && cfirst1 != clast &&
+               i < sln.customer_owners[customer].size() - 1;
+             ++i, cfirst1 = sln.customer_owners[customer].begin(),
+                  std::advance(cfirst1, i)) {
+            if (cfirst1 == clast)
+                break;
             size_t r_in = 0, c_in = 0;
             std::tie(r_in, c_in) = *cfirst1;
             validate_indices(r_in, c_in, sln.routes);
