@@ -1,5 +1,5 @@
-#include "logging.h"
 #include "savings.h"
+#include "logging.h"
 
 #include <algorithm>
 #include <iostream>
@@ -363,12 +363,10 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                             }
                         } else {
                             bool can_serve = 0;
-                            size_t veh_spl = 0;
 
                             for (auto& a : common_veh)
                                 if (prob.vehicles[a].capacity >= tmp_cap &&
                                     (used_veh[a] == 0)) {
-                                    veh_spl = a;
                                     can_serve = 1;
                                 }
 
@@ -577,11 +575,9 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                             }
                         } else {
                             bool can_serve = 0;
-                            size_t veh_spl = 0;
                             for (auto& a : common_veh)
                                 if (prob.vehicles[a].capacity >= tmp_cap &&
                                     (used_veh[a] == 0)) {
-                                    veh_spl = a;
                                     can_serve = 1;
                                 }
 
@@ -729,7 +725,7 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 
         // fix non-served cust
         for (auto cust : non_served_cust) {
-             //std::cout << "non-served "<<cust<<std::endl;
+            // std::cout << "non-served "<<cust<<std::endl;
             // non-split case
             if (!enable_splits) {
                 for (auto& a : routes) {
@@ -759,7 +755,7 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
         // fix non-served cust
         for (size_t i = 1; i < dest.size(); ++i) {
             if (dest[i] == 0) {
-                 //std::cout << "didn't serve " << i << std::endl;
+                // std::cout << "didn't serve " << i << std::endl;
                 auto cust = i;
                 // non-split case
                 if (!enable_splits) {
@@ -821,7 +817,7 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 
                                     inf = splits[ind].split_info[cst];
                                     splits[ind].split_info.erase(cst);
-                                    
+
                                     us = 1;
                                     break;
                                 }
@@ -861,7 +857,6 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
         sav_sol.routes = listed_routes;
         if (enable_splits)
             sav_sol.route_splits = splits;
-
 
         // update solution info
         sav_sol.update_customer_owners(prob);
