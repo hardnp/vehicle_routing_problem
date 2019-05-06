@@ -282,7 +282,7 @@ find_closest(const Problem& prob, Solution& sln, size_t src_id, size_t dst_id,
     }
 
     if (closest_pairs.empty()) {
-        return std::make_pair(src_end, dst_end);
+        return std::make_pair(src.end(), dst.end());
     }
 
     // find closest pair of (src, dst) nodes in existing
@@ -324,7 +324,7 @@ find_closest(const Problem& prob, Solution& sln, size_t src_id,
     }
 
     if (closest_pairs.empty()) {
-        return std::make_pair(src_end, node_it);
+        return std::make_pair(src.end(), node_it);
     }
 
     // find closest pair of (src, dst) nodes in existing
@@ -794,13 +794,21 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
                     std::tie(neighbour_it_in, neighbour_it_out) =
                         find_closest(m_prob, sln, r_out, r_in, customer);
                 }
-                if (neighbour_it_in == route_out.end() ||
-                    neighbour_it_out == route_in.end()) {
+                if (neighbour_it_in == route_out.end()) {
+                    sln.routes[r_in].second = std::move(route_in_orig);
+                    split_in.split_info[customer] = erased_ratio;
+                    split_out.split_info.at(customer) -= erased_ratio;
                     continue;
                 }
 
                 // decide where to put new node: before closest or after
                 size_t neighbour = *neighbour_it_in;
+                if (neighbour == 0) {
+                    sln.routes[r_in].second = std::move(route_in_orig);
+                    split_in.split_info[customer] = erased_ratio;
+                    split_out.split_info.at(customer) -= erased_ratio;
+                    continue;
+                }
                 if (loop_occured) {
                     // if route_in is loop, there's only one possibility
                     route_in.insert(std::next(neighbour_it_out), neighbour);
