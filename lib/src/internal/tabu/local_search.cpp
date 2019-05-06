@@ -795,11 +795,20 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
                         find_closest(m_prob, sln, r_out, r_in, customer);
                 }
                 if (neighbour_it_in == route_out.end()) {
+                    sln.routes[r_in].second = std::move(route_in_orig);
+                    split_in.split_info[customer] = erased_ratio;
+                    split_out.split_info.at(customer) -= erased_ratio;
                     continue;
                 }
 
                 // decide where to put new node: before closest or after
                 size_t neighbour = *neighbour_it_in;
+                if (neighbour == 0) {
+                    sln.routes[r_in].second = std::move(route_in_orig);
+                    split_in.split_info[customer] = erased_ratio;
+                    split_out.split_info.at(customer) -= erased_ratio;
+                    continue;
+                }
                 if (loop_occured) {
                     // if route_in is loop, there's only one possibility
                     route_in.insert(std::next(neighbour_it_out), neighbour);
