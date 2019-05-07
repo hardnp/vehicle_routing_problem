@@ -9,6 +9,7 @@
 #include <type_traits>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 // can be overriden from the outside
 #ifndef TABU_TENURE
@@ -18,8 +19,7 @@
 
 namespace vrp {
 namespace tabu {
-// TODO : '1' doesn't work later w/o sorting in set
-#define USE_HASH_SET 0
+#define USE_HASH_SET 1
 
 namespace detail {
 template<typename T, int Tenure> struct Entry : public T {
@@ -29,10 +29,6 @@ template<typename T, int Tenure> struct Entry : public T {
     Entry() = delete;
     inline Entry(const T& v) : T(v) {}
     inline Entry(T&& v) : T(std::move(v)) {}
-    // bool operator==(const Entry& other) const { return value == other.value;
-    // } bool operator<(const Entry& other) const { return value < other.value;
-    // } bool operator==(const T& other_value) const { return value ==
-    // other_value; }
 };
 
 #if USE_HASH_SET
@@ -61,14 +57,20 @@ template<typename T, int Tenure> class TabuList {
 #else
     using set_t = std::set<detail::Entry<T, Tenure>>;
 #endif
+    using vector_t = std::vector<detail::Entry<T, Tenure>>;
     set_t entries;
 
     inline set_t diff(const set_t& lhs, const set_t& rhs) {
+#define MOVE(x) std::make_move_iterator(x)
         set_t result;
-        // TODO: is it only me or std::set_difference doesn't return __unique__
-        // values but only found in first of two sets?
-        std::set_difference(rhs.cbegin(), rhs.cend(), lhs.cbegin(), lhs.cend(),
+        vector_t vrhs(rhs.cbegin(), rhs.cend());
+        std::sort(vrhs.begin(), vrhs.end());
+        vector_t vlhs(lhs.cbegin(), lhs.cend());
+        std::sort(vlhs.begin(), vlhs.end());
+        std::set_difference(MOVE(vrhs.begin()), MOVE(vrhs.end()),
+                            MOVE(vlhs.begin()), MOVE(vlhs.end()),
                             std::inserter(result, result.end()));
+#undef MOVE
         return result;
     }
 
