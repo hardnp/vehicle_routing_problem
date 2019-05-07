@@ -53,6 +53,25 @@ void print_fmt(double objective, int violated_time,
               << violated_q << EOL;
 }
 
+std::string
+pairs(const std::vector<std::pair<vrp::Solution::VehicleIndex,
+                                  vrp::Solution::RouteType>>& routes) {
+    std::stringstream ss;
+    for (const auto& p : routes) {
+        ss << p.first << " ";
+    }
+    return ss.str();
+}
+
+void print_fmt(double objective, double cost_function,
+               const std::vector<std::pair<vrp::Solution::VehicleIndex,
+                                           vrp::Solution::RouteType>>& routes,
+               int violated_time, vrp::TransportationQuantity violated_q) {
+    LOG_DEBUG << " STATS: " << objective << " | " << cost_function << " | "
+              << routes.size() << " | vehicles: " << pairs(routes) << "| "
+              << violated_time << " | " << violated_q << EOL;
+}
+
 void deduplicate(const vrp::Problem& prob, std::vector<vrp::Solution>& slns) {
     std::sort(slns.begin(), slns.end(),
               [&prob](const auto& a, const auto& b) -> bool {
@@ -164,7 +183,11 @@ int main(int argc, char* argv[]) {
 
     if (print_debug_info) {
         print_main_info(problem, best_sln, "Improved");
-        print_fmt(cost_function(problem, best_sln),
+        print_fmt(objective(problem, best_sln),
+                  vrp::constraints::total_violated_time(problem, best_sln),
+                  vrp::constraints::total_violated_capacity(problem, best_sln));
+        print_fmt(objective(problem, best_sln),
+                  cost_function(problem, best_sln), best_sln.routes,
                   vrp::constraints::total_violated_time(problem, best_sln),
                   vrp::constraints::total_violated_capacity(problem, best_sln));
     }
