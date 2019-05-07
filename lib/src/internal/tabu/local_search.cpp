@@ -424,7 +424,8 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists,
         bool skip_to_next_customer = false;
         auto cfirst = sln.customer_owners[customer].cbegin(),
              clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst != clast; ++cfirst) {
+        for (; !skip_to_next_customer && cfirst != clast;
+             skip_to_next_customer ? cfirst = clast : ++cfirst) {
             size_t r_in = 0, c_index = 0;
             std::tie(r_in, c_index) = *cfirst;
             validate_indices(r_in, c_index, sln.routes);
@@ -731,7 +732,8 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
         bool skip_to_next_customer = false;
         auto cfirst1 = sln.customer_owners[customer].cbegin(),
              clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst1 != clast; ++cfirst1) {
+        for (; !skip_to_next_customer && cfirst1 != clast;
+             skip_to_next_customer ? cfirst1 = clast : ++cfirst1) {
             size_t r_in = 0, c_in = 0;
             std::tie(r_in, c_in) = *cfirst1;
             validate_indices(r_in, c_in, sln.routes);
@@ -954,7 +956,8 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
         bool skip_to_next_customer = false;
         auto cfirst = sln.customer_owners[customer].cbegin(),
              clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst != clast; ++cfirst) {
+        for (; !skip_to_next_customer && cfirst != clast;
+             skip_to_next_customer ? cfirst = clast : ++cfirst) {
             size_t r1 = 0, c_index = 0;
             std::tie(r1, c_index) = *cfirst;
             validate_indices(r1, c_index, sln.routes);
@@ -973,7 +976,8 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
 
                 auto nfirst = sln.customer_owners[neighbour].cbegin(),
                      nlast = sln.customer_owners[neighbour].cend();
-                for (; !skip_to_next_customer && nfirst != nlast; ++nfirst) {
+                for (; !skip_to_next_customer && nfirst != nlast;
+                     skip_to_next_customer ? nfirst = nlast : ++nfirst) {
                     size_t r2 = 0, n_index = 0;
                     std::tie(r2, n_index) = *nfirst;
                     validate_indices(r2, n_index, sln.routes);
@@ -1583,7 +1587,8 @@ void LocalSearchMethods::merge_splits(Solution& sln) {
         bool skip_to_next_customer = false;
         auto cfirst1 = sln.customer_owners[customer].cbegin(),
              clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst1 != clast; ++cfirst1) {
+        for (; !skip_to_next_customer && cfirst1 != clast;
+             skip_to_next_customer ? cfirst1 = clast : ++cfirst1) {
             size_t r_in = 0, c_in = 0;
             std::tie(r_in, c_in) = *cfirst1;
             validate_indices(r_in, c_in, sln.routes);

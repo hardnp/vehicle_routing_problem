@@ -27,9 +27,9 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${WARN_FLAGS} -O3 -DNDEBUG")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     set(CMAKE_CXX_FLAGS_DEBUG
-        "${CMAKE_CXX_FLAGS} /Wall /WX /O0")
+        "${CMAKE_CXX_FLAGS_DEBUG} /Wall /O0")
     set(CMAKE_CXX_FLAGS_RELEASE
-        "${CMAKE_CXX_FLAGS} /Wall /WX /O3 -DNDEBUG")
+        "${CMAKE_CXX_FLAGS} /Wall /O3 -DNDEBUG")
 endif()
 
 # add CMAKE_MODULE_PATH entries for local modules discovery

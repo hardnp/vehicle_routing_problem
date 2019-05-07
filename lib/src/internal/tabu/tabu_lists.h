@@ -18,7 +18,8 @@
 
 namespace vrp {
 namespace tabu {
-#define USE_HASH_SET 1
+// TODO : '1' doesn't work later w/o sorting in set
+#define USE_HASH_SET 0
 
 namespace detail {
 template<typename T, int Tenure> struct Entry : public T {
