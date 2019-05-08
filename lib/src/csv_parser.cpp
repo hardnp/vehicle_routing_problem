@@ -18,7 +18,7 @@ namespace {
 bool type_specifier(std::string& line) {
     static std::vector<std::string> supported_types = {"table", "value"};
     for (const auto& type : supported_types) {
-        if (std::equal(line.cbegin(), line.cbegin() + type.size(),
+        if (line.length() >= 5 && std::equal(line.cbegin(), line.cbegin() + type.size(),
                        type.cbegin())) {
             // remove type specifier from string
             line = {line.begin() + type.size() + 1, line.end()};

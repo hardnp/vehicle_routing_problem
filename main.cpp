@@ -48,9 +48,9 @@ void print_main_info(const vrp::Problem& prob, const vrp::Solution& sln,
 }
 
 void print_fmt(double objective, int violated_time,
-               vrp::TransportationQuantity violated_q) {
+               vrp::TransportationQuantity violated_q, bool satisfies_sd) {
     LOG_DEBUG << " SOLUTION: " << objective << " | " << violated_time << " | "
-              << violated_q << EOL;
+              << violated_q << " | " << satisfies_sd << EOL;
 }
 
 std::string
@@ -63,13 +63,12 @@ pairs(const std::vector<std::pair<vrp::Solution::VehicleIndex,
     return ss.str();
 }
 
-void print_fmt(double objective, double cost_function,
+void print_fmt(const vrp::Problem& prob, double objective, double cost_function,
                const std::vector<std::pair<vrp::Solution::VehicleIndex,
-                                           vrp::Solution::RouteType>>& routes,
-               int violated_time, vrp::TransportationQuantity violated_q) {
+                                           vrp::Solution::RouteType>>& routes) {
     LOG_DEBUG << " STATS: " << objective << " | " << cost_function << " | "
               << routes.size() << " | vehicles: " << pairs(routes) << "| "
-              << violated_time << " | " << violated_q << EOL;
+              << EOL;
 }
 
 void deduplicate(const vrp::Problem& prob, std::vector<vrp::Solution>& slns) {
@@ -117,7 +116,8 @@ int main(int argc, char* argv[]) {
 
     // only use initial heuristics that solve split delivery problem
     if (problem.enable_splits()) {
-        initial_heuristics = {vrp::InitialHeuristic::ClusterFirstRouteSecond};
+        initial_heuristics = {vrp::InitialHeuristic::ClusterFirstRouteSecond,
+                              vrp::InitialHeuristic::Savings};
     }
 
     std::vector<vrp::Solution> solutions = {};
@@ -183,13 +183,13 @@ int main(int argc, char* argv[]) {
 
     if (print_debug_info) {
         print_main_info(problem, best_sln, "Improved");
-        print_fmt(objective(problem, best_sln),
-                  vrp::constraints::total_violated_time(problem, best_sln),
-                  vrp::constraints::total_violated_capacity(problem, best_sln));
-        print_fmt(objective(problem, best_sln),
-                  cost_function(problem, best_sln), best_sln.routes,
-                  vrp::constraints::total_violated_time(problem, best_sln),
-                  vrp::constraints::total_violated_capacity(problem, best_sln));
+        print_fmt(
+            objective(problem, best_sln),
+            vrp::constraints::total_violated_time(problem, best_sln),
+            vrp::constraints::total_violated_capacity(problem, best_sln),
+            vrp::constraints::satisfies_site_dependency(problem, best_sln));
+        print_fmt(problem, objective(problem, best_sln),
+                  cost_function(problem, best_sln), best_sln.routes);
     }
 
     return 0;

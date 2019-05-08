@@ -29,7 +29,8 @@ std::vector<Solution> create_initial_solutions(const Problem& prob,
     const bool fill_with_default = !prob.enable_splits();
     switch (heuristic) {
     case InitialHeuristic::Savings:
-        return fill_splits(prob, detail::savings(prob, count), true);
+        return fill_splits(prob, detail::savings(prob, count),
+                           fill_with_default);
     case InitialHeuristic::Insertion:
         return {};
     case InitialHeuristic::ParallelInsertion:

@@ -2,33 +2,60 @@
 #include "logging.h"
 
 #include <algorithm>
-#include <array>
-#include <ctime>
 #include <iostream>
 #include <map>
 #include <numeric>
+#include <random>
 #include <tuple>
-
-// some regularisation
-#define MAX_WAITING_TIME 1000
-#define MAX_TIME_VIOLATION 0
-#define MAX_CAPACITY_VIOLATION 0
-#define FIRST_RAND_ROUTES 10
+#include <unordered_map>
 
 namespace vrp {
 namespace detail {
 
 std::vector<Solution> savings(const Problem& prob, size_t count) {
     std::vector<Solution> solutions;
-    std::srand(1555876069u);
+
+    const auto cust_size = prob.customers.size() - 1;
+    const auto points = cust_size + 1;  // + 1 for depo itself
+
+    // enable splits or not
+    const auto enable_splits = prob.enable_splits();
+    const auto max_splits = prob.max_splits;
+
+    std::random_device rd;
+    // a seed with the best result
+    const auto seed = 1734553445u; //1330
+    // const auto seed = 4241856268u; //1330
+    // const auto seed = 1176554214u; //1585
+    // const auto seed = 2386544644u; //1330
+    // const auto seed = 2429677703u; //1488
+
+    // auto seed = rd();
+
+    std::mt19937 gen(seed);
+    std::uniform_int_distribution<> dis(1, cust_size);
 
     for (size_t it = 0; it < count; ++it) {
-        const auto cust_size = prob.customers.size() - 1;
-        const auto points = cust_size + 1;  // + 1 for depo itself
 
-        // vehicle id <-> customets ids
+        // split demands
+        std::vector<TransportationQuantity> split_demand(points, {0, 0});
+        for (unsigned int i = 1; i < points; ++i)
+            split_demand[i] = prob.customers[i].demand;
+
+        // splited customers
+        std::vector<size_t> splited(points, 1);
+        splited[0] = 999;
+
+        // splited ratio
+        std::vector<double> splited_rat(points, 0.0);
+
+        // vehicle id <-> customers ids
         std::vector<std::pair<size_t, std::vector<size_t>>> routes;
         routes.reserve(cust_size);
+
+        // vehicle id <-> customer splits
+        std::vector<SplitInfo> splits;
+        splits.reserve(cust_size);
 
         // visited customers
         std::vector<size_t> dest(points, 0);
@@ -41,13 +68,17 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
         std::vector<std::vector<int>> vehicles_for_cust(points);
         vehicles_for_cust[0] = {};
 
-        // FIXME: generation via iota for solomon
-        for (unsigned int i = 1; i < points; ++i) {
-            vehicles_for_cust[i].resize(prob.vehicles.size());
-            std::iota(std::begin(vehicles_for_cust[i]),
-                      std::end(vehicles_for_cust[i]), 0);
+        // Generation via iota for solomon
+        if (prob.customers[1].suitable_vehicles.empty()) {
+            for (unsigned int i = 1; i < points; ++i) {
+                vehicles_for_cust[i].resize(prob.vehicles.size());
+                std::iota(std::begin(vehicles_for_cust[i]),
+                          std::end(vehicles_for_cust[i]), 0);
+            }
+        } else {
+            for (unsigned int i = 1; i < points; ++i)
+                vehicles_for_cust[i] = prob.customers[i].suitable_vehicles;
         }
-        // vehicles_for_cust[i] = prob.customers[i].suitable_vehicles;
 
         // saving for i -> j edge
         struct S {
@@ -100,68 +131,186 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                 prob.customers[i].service_time};
         }
 
-        // veh cust cap
+        // veh cust cap split
         std::tuple<std::vector<int>, std::vector<size_t>,
-                   TransportationQuantity>
+                   TransportationQuantity, SplitInfo>
             current_route;
 
-        size_t rand_cust = rand() % cust_size + 1;
-        current_route = {vehicles_for_cust[rand_cust],
-                         {0, rand_cust, 0},
-                         prob.customers[rand_cust].demand};
+        size_t rand_cust = dis(gen);
+        current_route = std::tuple<std::vector<int>, std::vector<size_t>,
+                                   TransportationQuantity, SplitInfo>{
+            vehicles_for_cust[rand_cust],
+            {0, rand_cust, 0},
+            split_demand[rand_cust],
+            SplitInfo{}};
+
+        bool rand_split = 1;
+        if (enable_splits) {
+            std::get<3>(current_route).split_info[rand_cust] = {1.0};
+            std::get<3>(current_route).split_info[0] = {1.0};
+            for (auto& a : std::get<0>(current_route))
+                if (prob.vehicles[a].capacity >= std::get<2>(current_route))
+                    // can be served w/o split
+                    rand_split = 0;
+        }
 
         // number of visited customers
         size_t served = 1;
         dest[rand_cust] = 1;
         bool pick_new_route = 0;
-        int first_rand_routes = 1;
 
-        while (served < cust_size) {
+        if (enable_splits && rand_split) {
+            served = 0;
+            dest[rand_cust] = 0;
+            std::get<0>(current_route) = {
+                *std::max_element(std::get<0>(current_route).begin(),
+                                  std::get<0>(current_route).end(),
+                                  [&](const int& a, const int& b) {
+                                      return prob.vehicles[a].capacity <
+                                             prob.vehicles[b].capacity;
+                                  })};
+            std::get<2>(current_route) =
+                prob.vehicles[std::get<0>(current_route)[0]].capacity;
+
+            std::get<3>(current_route).split_info[rand_cust] = {
+                (double)std::get<2>(current_route).volume /
+                prob.customers[rand_cust].demand.volume};
+
+            split_demand[rand_cust] -= std::get<2>(current_route);
+
+            if (split_demand[rand_cust].volume < 0)
+                split_demand[rand_cust].volume = 0;
+            if (split_demand[rand_cust].weight < 0)
+                split_demand[rand_cust].weight = 0;
+
+            ++splited[rand_cust];
+            splited_rat[rand_cust] +=
+                std::get<3>(current_route).split_info[rand_cust];
+        }
+
+        size_t route_sz = 1;
+
+        std::vector<size_t> non_served_cust;
+
+        while (served < cust_size && route_sz <= prob.vehicles.size()) {
 
             if (pick_new_route) {
                 // initialise route with random customer
-                if (first_rand_routes < FIRST_RAND_ROUTES) {
-                    while (true) {
-                        size_t rand_cust = rand() % cust_size + 1;
-                        if (dest[rand_cust] == 1)
-                            continue;
-                        else {
-                            ++first_rand_routes;
-                            current_route = {vehicles_for_cust[rand_cust],
-                                             {0, rand_cust, 0},
-                                             prob.customers[rand_cust].demand};
-                            dest[rand_cust] = 1;
-                            pick_new_route = 0;
-                            ++served;
+                while (true) {
+                    size_t rand_cust = dis(gen);
+                    if (dest[rand_cust] == 1)
+                        continue;
+                    else {
+                        current_route =
+                            std::tuple<std::vector<int>, std::vector<size_t>,
+                                       TransportationQuantity, SplitInfo>{
+                                vehicles_for_cust[rand_cust],
+                                {0, rand_cust, 0},
+                                split_demand[rand_cust],
+                                SplitInfo{}};
+                        dest[rand_cust] = 1;
+                        pick_new_route = 0;
+                        ++served;
+
+                        bool spare_veh = 0;
+                        int veh_num = 0;
+                        for (auto a : std::get<0>(current_route))
+                            if (used_veh[a] == 0) {
+                                spare_veh = 1;
+                                veh_num = a;
+                                break;
+                            }
+
+                        // cannot be served
+                        if (!spare_veh) {
+                            non_served_cust.push_back(
+                                std::get<1>(current_route)[1]);
+                            pick_new_route = 1;
                             break;
                         }
-                    }
-                    // find first non-visited
-                } else {
-                    for (size_t i = 1; i < points; ++i) {
-                        if (dest[i] == 0) {
-                            current_route = {vehicles_for_cust[i],
-                                             {0, i, 0},
-                                             prob.customers[i].demand};
-                            dest[i] = 1;
-                            pick_new_route = 0;
-                            ++served;
-                            break;
+
+                        if (enable_splits) {
+                            std::get<3>(current_route).split_info[0] = {1.0};
+                            std::get<3>(current_route).split_info[rand_cust] =
+                                1.0 - splited_rat[rand_cust];
                         }
+
+                        if (enable_splits &&
+                            (splited[rand_cust] < (size_t)max_splits)) {
+                            bool rand_split = 1;
+                            for (auto& a : std::get<0>(current_route))
+                                if ((prob.vehicles[a].capacity >=
+                                     std::get<2>(current_route)) &&
+                                    used_veh[a] == 0)
+                                    // can be served w/o split
+                                    rand_split = 0;
+
+                            if (rand_split) {
+                                --served;
+                                dest[rand_cust] = 0;
+                                std::get<0>(current_route) = {veh_num};
+
+                                std::get<2>(current_route) =
+                                    prob.vehicles[std::get<0>(current_route)[0]]
+                                        .capacity;
+
+                                std::get<3>(current_route)
+                                    .split_info[rand_cust] = {
+                                    (double)std::get<2>(current_route).volume /
+                                    prob.customers[rand_cust].demand.volume};
+
+                                split_demand[rand_cust] -=
+                                    std::get<2>(current_route);
+
+                                if (split_demand[rand_cust].volume < 0)
+                                    split_demand[rand_cust].volume = 0;
+                                if (split_demand[rand_cust].weight < 0)
+                                    split_demand[rand_cust].weight = 0;
+
+                                ++splited[rand_cust];
+                                splited_rat[rand_cust] +=
+                                    std::get<3>(current_route)
+                                        .split_info[rand_cust];
+                            }
+                        }
+                        break;
                     }
                 }
 
                 // workaround if the last customer is served randomly
-                if (served == cust_size) {
+                if (served == cust_size ||
+                    prob.vehicles.size() - route_sz == 0) {
+                    /* std::cout << "i'm here " << std::get<1>(current_route)[1]
+                               << std::endl;*/
+                    ++served;
+                    ++route_sz;
+                    bool spare_veh = 0;
+                    size_t veh_num;
+                    for (auto a : std::get<0>(current_route))
+                        if (used_veh[a] == 0) {
+                            spare_veh = 1;
+                            veh_num = a;
+                            break;
+                        }
+
+                    // cannot be served
+                    if (!spare_veh) {
+                        dest[std::get<1>(current_route)[1]] = 1;
+                        /*non_served_cust.push_back(
+                            std::get<1>(current_route)[1]);*/
+                        continue;
+                    }
+
                     std::pair<size_t, std::vector<size_t>> route_to_add;
-                    route_to_add.first = std::get<0>(current_route)[0];
+                    route_to_add.first = veh_num;
                     used_veh[route_to_add.first] = 1;
+                    ++route_sz;
                     route_to_add.second = std::get<1>(current_route);
                     routes.push_back(route_to_add);
+                    splits.push_back(std::get<3>(current_route));
                 }
 
                 continue;
-
             } else {
 
                 for (size_t i = 0; i < save.size(); ++i) {
@@ -184,27 +333,80 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 
                         if (common_veh.empty()) {
                             site_dep_viol = 1;
+                            continue;
                         }
 
                         bool cap_viol = 0;
+                        bool was_splited = 0;
+
                         TransportationQuantity tmp_cap =
                             std::get<2>(current_route);
-                        tmp_cap += prob.customers[best_save.i].demand;
+                        tmp_cap += split_demand[best_save.i];
 
-                        // veh is used or out of capacity
-                        common_veh.erase(
-                            std::remove_if(common_veh.begin(), common_veh.end(),
-                                           [&](const int& x) {
-                                               return (
-                                                   (prob.vehicles[x].capacity +
-                                                        MAX_CAPACITY_VIOLATION <
-                                                    tmp_cap) ||
-                                                   (used_veh[x] == 1));
-                                           }),
-                            common_veh.end());
+                        // non-split case
+                        if (!enable_splits ||
+                            splited[best_save.i] >= (size_t)max_splits) {
+                            // veh is used or out of capacity
+                            common_veh.erase(
+                                std::remove_if(
+                                    common_veh.begin(), common_veh.end(),
+                                    [&](const int& x) {
+                                        return ((prob.vehicles[x].capacity <
+                                                 tmp_cap) ||
+                                                (used_veh[x] == 1));
+                                    }),
+                                common_veh.end());
 
-                        if (common_veh.empty()) {
-                            cap_viol = 1;
+                            if (common_veh.empty()) {
+                                cap_viol = 1;
+                                continue;
+                            }
+                        } else {
+                            bool can_serve = 0;
+
+                            for (auto& a : common_veh)
+                                if (prob.vehicles[a].capacity >= tmp_cap &&
+                                    (used_veh[a] == 0)) {
+                                    can_serve = 1;
+                                }
+
+                            if (can_serve == 1) {
+                                common_veh.erase(
+                                    std::remove_if(
+                                        common_veh.begin(), common_veh.end(),
+                                        [&](const int& x) {
+                                            return ((prob.vehicles[x].capacity <
+                                                     tmp_cap) ||
+                                                    (used_veh[x] == 1));
+                                        }),
+                                    common_veh.end());
+
+                                /*if (common_veh.empty()) {
+                                  cap_viol = 1;
+                                    continue;
+                                }*/
+                            } else {
+                                // need to be splited truly
+                                common_veh.erase(
+                                    std::remove_if(
+                                        common_veh.begin(), common_veh.end(),
+                                        [&](const int& x) {
+                                            return (
+                                                (prob.vehicles[x].capacity <=
+                                                 tmp_cap -
+                                                     split_demand[best_save
+                                                                      .i]) ||
+                                                (used_veh[x] == 1));
+                                        }),
+                                    common_veh.end());
+
+                                if (common_veh.empty()) {
+                                    cap_viol = 1;
+                                    continue;
+                                } else {
+                                    was_splited = 1;
+                                }
+                            }
                         }
 
                         bool tw_violation = 0;
@@ -225,7 +427,7 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                         for (size_t s = 1; s < current_customers.size() - 1;
                              ++s) {
                             if (curr_time + times[curr].service_time >
-                                times[curr].finish + MAX_TIME_VIOLATION) {
+                                times[curr].finish) {
                                 tw_violation = 1;
                                 break;
                             }
@@ -247,25 +449,64 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                                 prob.times[current_customers
                                                [current_customers.size() - 2]]
                                           [0] >
-                            times[0].finish + MAX_TIME_VIOLATION) {
-                            tw_violation = 1;
-                        }
-
-                        // magic num for to much waiting
-                        if (times[current_customers[1]].start -
-                                times[current_customers[1]].current + offset >
-                            MAX_WAITING_TIME) {
+                            times[0].finish) {
                             tw_violation = 1;
                         }
 
                         // adding to the begin
                         if (!tw_violation && !site_dep_viol && !cap_viol) {
-                            ++served;
-                            dest[best_save.i] = 1;
+
+                            if (was_splited) {
+                                std::get<0>(current_route) = {*std::max_element(
+                                    common_veh.begin(), common_veh.end(),
+                                    [&](const int& a, const int& b) {
+                                        return prob.vehicles[a].capacity <
+                                               prob.vehicles[b].capacity;
+                                    })};
+                                std::get<2>(current_route) =
+                                    prob.vehicles[std::get<0>(current_route)[0]]
+                                        .capacity;
+
+                                auto splited_cap =
+                                    std::get<2>(current_route) -
+                                    (tmp_cap - split_demand[best_save.i]);
+
+                                std::get<3>(current_route)
+                                    .split_info[best_save.i] = {
+                                    (double)splited_cap.volume /
+                                    prob.customers[best_save.i].demand.volume};
+
+                                /*if
+                                   (std::get<3>(current_route).split_info[best_save.i]
+                                   < 0.0 ||
+                                    std::get<3>(current_route).split_info[best_save.i]
+                                   > 1.0) continue;*/
+
+                                split_demand[best_save.i] -= splited_cap;
+
+                                if (split_demand[best_save.i].volume < 0)
+                                    split_demand[best_save.i].volume = 0;
+                                if (split_demand[best_save.i].weight < 0)
+                                    split_demand[best_save.i].weight = 0;
+
+                                ++splited[best_save.i];
+                                splited_rat[best_save.i] +=
+                                    std::get<3>(current_route)
+                                        .split_info[best_save.i];
+                            } else {
+
+                                ++served;
+                                dest[best_save.i] = 1;
+                                if (enable_splits)
+                                    std::get<3>(current_route)
+                                        .split_info[best_save.i] =
+                                        1.0 - splited_rat[best_save.i];
+                                std::get<2>(current_route) = tmp_cap;
+                                std::get<0>(current_route) = common_veh;
+                            }
+
                             current_customers.insert(
                                 current_customers.begin() + 1, best_save.i);
-                            std::get<2>(current_route) = tmp_cap;
-                            std::get<0>(current_route) = common_veh;
 
                             auto prev = best_save.i;
                             auto curr = best_save.j;
@@ -307,26 +548,76 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 
                         if (common_veh.empty()) {
                             site_dep_viol = 1;
+                            continue;
                         }
 
                         bool cap_viol = 0;
+                        bool was_splited = 0;
                         TransportationQuantity tmp_cap =
                             std::get<2>(current_route);
-                        tmp_cap += prob.customers[best_save.j].demand;
+                        tmp_cap += split_demand[best_save.j];
 
-                        common_veh.erase(
-                            std::remove_if(common_veh.begin(), common_veh.end(),
-                                           [&](const int& x) {
-                                               return (
-                                                   (prob.vehicles[x].capacity +
-                                                        MAX_CAPACITY_VIOLATION <
-                                                    tmp_cap) ||
-                                                   (used_veh[x] == 1));
-                                           }),
-                            common_veh.end());
+                        if (!enable_splits ||
+                            splited[best_save.j] >= (size_t)max_splits) {
+                            common_veh.erase(
+                                std::remove_if(
+                                    common_veh.begin(), common_veh.end(),
+                                    [&](const int& x) {
+                                        return ((prob.vehicles[x].capacity <
+                                                 tmp_cap) ||
+                                                (used_veh[x] == 1));
+                                    }),
+                                common_veh.end());
 
-                        if (common_veh.empty()) {
-                            cap_viol = 1;
+                            if (common_veh.empty()) {
+                                cap_viol = 1;
+                                continue;
+                            }
+                        } else {
+                            bool can_serve = 0;
+                            for (auto& a : common_veh)
+                                if (prob.vehicles[a].capacity >= tmp_cap &&
+                                    (used_veh[a] == 0)) {
+                                    can_serve = 1;
+                                }
+
+                            if (can_serve == 1) {
+                                common_veh.erase(
+                                    std::remove_if(
+                                        common_veh.begin(), common_veh.end(),
+                                        [&](const int& x) {
+                                            return ((prob.vehicles[x].capacity <
+                                                     tmp_cap) ||
+                                                    (used_veh[x] == 1));
+                                        }),
+                                    common_veh.end());
+
+                                /*if (common_veh.empty()) {
+                                  cap_viol = 1;
+                                  continue;
+                                }*/
+                            } else {
+
+                                common_veh.erase(
+                                    std::remove_if(
+                                        common_veh.begin(), common_veh.end(),
+                                        [&](const int& x) {
+                                            return (
+                                                (prob.vehicles[x].capacity <=
+                                                 tmp_cap -
+                                                     split_demand[best_save
+                                                                      .j]) ||
+                                                (used_veh[x] == 1));
+                                        }),
+                                    common_veh.end());
+
+                                if (common_veh.empty()) {
+                                    cap_viol = 1;
+                                    continue;
+                                } else {
+                                    was_splited = 1;
+                                }
+                            }
                         }
 
                         bool tw_violation = 0;
@@ -338,33 +629,73 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
 
                         if (times[best_save.j].current + offset +
                                 times[best_save.j].service_time >
-                            times[best_save.j].finish + MAX_TIME_VIOLATION) {
+                            times[best_save.j].finish) {
                             tw_violation = 1;
                         }
 
                         if (times[best_save.j].current + offset +
                                 prob.times[best_save.j][0] +
                                 times[best_save.j].service_time >
-                            times[0].finish + MAX_TIME_VIOLATION) {
-                            tw_violation = 1;
-                        }
-
-                        // magic num for to much waiting
-                        if (times[best_save.j].start -
-                                times[best_save.j].current + offset >
-                            MAX_WAITING_TIME) {
+                            times[0].finish) {
                             tw_violation = 1;
                         }
 
                         if (!tw_violation && !site_dep_viol && !cap_viol) {
+
                             // adding to the end
-                            ++served;
-                            dest[best_save.j] = 1;
+                            if (was_splited) {
+                                std::get<0>(current_route) = {*std::max_element(
+                                    common_veh.begin(), common_veh.end(),
+                                    [&](const int& a, const int& b) {
+                                        return prob.vehicles[a].capacity <
+                                               prob.vehicles[b].capacity;
+                                    })};
+                                std::get<2>(current_route) =
+                                    prob.vehicles[std::get<0>(current_route)[0]]
+                                        .capacity;
+
+                                auto splited_cap =
+                                    std::get<2>(current_route) -
+                                    (tmp_cap - split_demand[best_save.j]);
+
+                                std::get<3>(current_route)
+                                    .split_info[best_save.j] = {
+                                    (double)splited_cap.volume /
+                                    prob.customers[best_save.j].demand.volume};
+
+                                if (std::get<3>(current_route)
+                                            .split_info[best_save.j] < 0.0 ||
+                                    std::get<3>(current_route)
+                                            .split_info[best_save.j] > 1.0)
+                                    continue;
+
+                                split_demand[best_save.j] -= splited_cap;
+
+                                if (split_demand[best_save.j].volume < 0)
+                                    split_demand[best_save.j].volume = 0;
+                                if (split_demand[best_save.j].weight < 0)
+                                    split_demand[best_save.j].weight = 0;
+
+                                ++splited[best_save.j];
+                                splited_rat[best_save.j] +=
+                                    std::get<3>(current_route)
+                                        .split_info[best_save.j];
+                            } else {
+
+                                ++served;
+                                dest[best_save.j] = 1;
+                                if (enable_splits)
+                                    std::get<3>(current_route)
+                                        .split_info[best_save.j] =
+                                        1.0 - splited_rat[best_save.j];
+                                std::get<2>(current_route) = tmp_cap;
+                                std::get<0>(current_route) = common_veh;
+                            }
+
                             std::get<1>(current_route)
                                 .insert(std::get<1>(current_route).end() - 1,
                                         best_save.j);
-                            std::get<2>(current_route) = tmp_cap;
-                            std::get<0>(current_route) = common_veh;
+
                             times[best_save.j].current =
                                 std::max(times[best_save.j].current + offset,
                                          times[best_save.j].current);
@@ -375,10 +706,139 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
                 pick_new_route = 1;
 
                 std::pair<size_t, std::vector<size_t>> route_to_add;
-                route_to_add.first = std::get<0>(current_route)[0];
+
+                size_t veh_num = 0;
+                for (auto a : std::get<0>(current_route))
+                    if (used_veh[a] == 0) {
+                        veh_num = a;
+                        break;
+                    }
+
+                route_to_add.first = veh_num;
                 used_veh[route_to_add.first] = 1;
+                ++route_sz;
                 route_to_add.second = std::get<1>(current_route);
                 routes.push_back(route_to_add);
+                splits.push_back(std::get<3>(current_route));
+            }
+        }
+
+        // fix non-served cust
+        for (auto cust : non_served_cust) {
+            // std::cout << "non-served "<<cust<<std::endl;
+            // non-split case
+            if (!enable_splits) {
+                for (auto& a : routes) {
+                    if (a.first == (size_t)vehicles_for_cust[cust][0]) {
+                        a.second.insert(a.second.end() - 1, cust);
+                        break;
+                    }
+                }
+            } else {
+                int ind = 0;
+                for (auto& a : routes) {
+                    // check site dep and occurance of the same cust
+                    if (std::find(vehicles_for_cust[cust].begin(),
+                                  vehicles_for_cust[cust].end(),
+                                  a.first) != vehicles_for_cust[cust].end() &&
+                        std::find(a.second.begin(), a.second.end(), cust) ==
+                            a.second.end()) {
+                        a.second.insert(a.second.end() - 1, cust);
+                        splits[ind].split_info[cust] = 1.0 - splited_rat[cust];
+                        break;
+                    }
+                    ++ind;
+                }
+            }
+        }
+
+        // fix non-served cust
+        for (size_t i = 1; i < dest.size(); ++i) {
+            if (dest[i] == 0) {
+                // std::cout << "didn't serve " << i << std::endl;
+                auto cust = i;
+                // non-split case
+                if (!enable_splits) {
+                    for (auto& a : routes) {
+                        if (a.first == (size_t)vehicles_for_cust[cust][0]) {
+                            a.second.insert(a.second.end() - 1, cust);
+                            break;
+                        }
+                    }
+                } else {
+                    int ind = 0;
+                    for (auto& a : routes) {
+                        // check site dep and occurance of the same cust
+                        if (std::find(vehicles_for_cust[cust].begin(),
+                                      vehicles_for_cust[cust].end(), a.first) !=
+                                vehicles_for_cust[cust].end() &&
+                            std::find(a.second.begin(), a.second.end(), cust) ==
+                                a.second.end()) {
+                            a.second.insert(a.second.end() - 1, cust);
+                            splits[ind].split_info[cust] =
+                                1.0 - splited_rat[cust];
+                            break;
+                        }
+                        ++ind;
+                    }
+                }
+            }
+        }
+
+        // fix routes < machines
+        if ((routes.size() < prob.vehicles.size()) && enable_splits) {
+            std::vector<size_t> mach(prob.vehicles.size());
+            for (auto b : routes) {
+                mach.push_back(b.first);
+            }
+
+            for (auto a : prob.vehicles) {
+                auto veh = a.id;
+                if (std::find(mach.begin(), mach.end(), veh) == mach.end()) {
+                    // found unused vehicle
+                    bool us = 0;
+                    int ind = 0;
+                    size_t cst = 0;
+                    double inf = 0.0;
+                    for (auto& b : routes) {
+                        if (b.second.size() > 3) {
+                            for (auto& cust : b.second) {
+                                if (cust != 0 &&
+                                    std::find(vehicles_for_cust[cust].begin(),
+                                              vehicles_for_cust[cust].end(),
+                                              veh) !=
+                                        vehicles_for_cust[cust].end()) {
+                                    // found cust to suite the vehicle
+                                    cst = cust;
+                                    b.second.erase(std::remove(b.second.begin(),
+                                                               b.second.end(),
+                                                               cust),
+                                                   b.second.end());
+
+                                    inf = splits[ind].split_info[cst];
+                                    splits[ind].split_info.erase(cst);
+
+                                    us = 1;
+                                    break;
+                                }
+                            }
+                        }
+                        ++ind;
+
+                        if (us)
+                            break;
+                    }
+
+                    // add new route
+                    std::pair<size_t, std::vector<size_t>> route_to_add;
+                    SplitInfo splt = {};
+                    route_to_add.first = veh;
+                    route_to_add.second = {0, cst, 0};
+                    routes.push_back(route_to_add);
+                    splt.split_info[0] = {1.0};
+                    splt.split_info[cst] = {inf};
+                    splits.push_back(splt);
+                }
             }
         }
 
@@ -393,18 +853,41 @@ std::vector<Solution> savings(const Problem& prob, size_t count) {
             }
             ++ii;
         }
+
         sav_sol.routes = listed_routes;
+        if (enable_splits)
+            sav_sol.route_splits = splits;
 
         // update solution info
         sav_sol.update_customer_owners(prob);
         sav_sol.update_times(prob);
         sav_sol.update_used_vehicles();
 
+        // printing
+        /*for (auto b : sav_sol.routes) {
+            std::cout << b.first << " veh" << std::endl;
+            for (auto c : b.second) {
+                std::cout << c << " ";
+            }
+            std::cout << std::endl << std::endl;
+        }
+        std::cout << "splits:" << std::endl;
+        for (auto b : sav_sol.route_splits) {
+
+            for (auto c : b.split_info) {
+                std::cout << c.first << " with " << c.second << " | ";
+            }
+            std::cout << std::endl << std::endl;
+        }
+        std::cout << "*****************************************************"
+                     "*********"
+                  << std::endl;*/
+
         solutions.push_back(sav_sol);
     }
 
     return solutions;
-}
+}  // namespace detail
 
 }  // namespace detail
 }  // namespace vrp

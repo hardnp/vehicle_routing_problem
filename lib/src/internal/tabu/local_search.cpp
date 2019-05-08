@@ -38,6 +38,17 @@ inline bool site_dependent(const Problem& prob, size_t vehicle,
     return allowed[vehicle];
 }
 
+// site dependency check for a vector
+inline bool site_dependent(const Problem& prob, size_t vehicle,
+                           const std::vector<size_t>& customers) {
+    for (auto c : customers) {
+        if (!site_dependent(prob, vehicle, c)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 inline Solution::CustomerIndex at(const Solution::RouteType& route, size_t i) {
     if (i >= route.size()) {
         throw std::out_of_range("i >= route size");
@@ -334,6 +345,17 @@ find_closest(const Problem& prob, Solution& sln, size_t src_id,
                                         prob.costs[*b.first][*b.second];
                              });
 }
+
+/// Advance iterator by 1 if expr is true
+template<typename Iterator> inline void safe_next(bool expr, Iterator& it) {
+    if (expr) {
+        ++it;
+    }
+}
+
+/// Safely loop over range [first, last) conditionally breaking if expr is true
+#define SAFE_FOR(expr, first, last)                                            \
+    for (; !expr && first != last; safe_next(!expr, first))
 }  // namespace
 
 LocalSearchMethods::LocalSearchMethods(const Problem& prob) noexcept
@@ -424,7 +446,7 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists,
         bool skip_to_next_customer = false;
         auto cfirst = sln.customer_owners[customer].cbegin(),
              clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst != clast; ++cfirst) {
+        SAFE_FOR(skip_to_next_customer, cfirst, clast) {
             size_t r_in = 0, c_index = 0;
             std::tie(r_in, c_index) = *cfirst;
             validate_indices(r_in, c_index, sln.routes);
@@ -443,7 +465,7 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists,
 
                 auto nfirst = sln.customer_owners[neighbour].cbegin(),
                      nlast = sln.customer_owners[neighbour].cend();
-                for (; !skip_to_next_customer && nfirst != nlast; ++nfirst) {
+                SAFE_FOR(skip_to_next_customer, nfirst, nlast) {
                     size_t r_out = 0, n_index = 0;
                     std::tie(r_out, n_index) = *nfirst;
                     validate_indices(r_out, n_index, sln.routes);
@@ -619,7 +641,7 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists,
         bool skip_to_next_customer = false;
         auto cfirst = sln.customer_owners[customer].cbegin(),
              clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst != clast; ++cfirst) {
+        SAFE_FOR(skip_to_next_customer, cfirst, clast) {
             size_t r_in = 0, c_index = 0;
             std::tie(r_in, c_index) = *cfirst;
             validate_indices(r_in, c_index, sln.routes);
@@ -731,14 +753,14 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
         bool skip_to_next_customer = false;
         auto cfirst1 = sln.customer_owners[customer].cbegin(),
              clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst1 != clast; ++cfirst1) {
+        SAFE_FOR(skip_to_next_customer, cfirst1, clast) {
             size_t r_in = 0, c_in = 0;
             std::tie(r_in, c_in) = *cfirst1;
             validate_indices(r_in, c_in, sln.routes);
             SplitInfo& split_in = sln.route_splits[r_in];
 
             auto cfirst2 = sln.customer_owners[customer].cbegin();
-            for (; !skip_to_next_customer && cfirst2 != clast; ++cfirst2) {
+            SAFE_FOR(skip_to_next_customer, cfirst2, clast) {
                 if (cfirst1 == cfirst2) {
                     continue;
                 }
@@ -801,14 +823,19 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
                     continue;
                 }
 
-                // decide where to put new node: before closest or after
+                // check that neighbour is actually good: if it's a depot or
+                // site dependency is unsatisfied, cannot relocate
                 size_t neighbour = *neighbour_it_in;
-                if (neighbour == 0) {
+                if (neighbour == 0 ||
+                    !site_dependent(m_prob, sln.routes[r_in].first,
+                                    neighbour)) {
                     sln.routes[r_in].second = std::move(route_in_orig);
                     split_in.split_info[customer] = erased_ratio;
                     split_out.split_info.at(customer) -= erased_ratio;
                     continue;
                 }
+
+                // decide where to put new node: before closest or after
                 if (loop_occured) {
                     // if route_in is loop, there's only one possibility
                     route_in.insert(std::next(neighbour_it_out), neighbour);
@@ -954,7 +981,7 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
         bool skip_to_next_customer = false;
         auto cfirst = sln.customer_owners[customer].cbegin(),
              clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst != clast; ++cfirst) {
+        SAFE_FOR(skip_to_next_customer, cfirst, clast) {
             size_t r1 = 0, c_index = 0;
             std::tie(r1, c_index) = *cfirst;
             validate_indices(r1, c_index, sln.routes);
@@ -973,7 +1000,7 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
 
                 auto nfirst = sln.customer_owners[neighbour].cbegin(),
                      nlast = sln.customer_owners[neighbour].cend();
-                for (; !skip_to_next_customer && nfirst != nlast; ++nfirst) {
+                SAFE_FOR(skip_to_next_customer, nfirst, nlast) {
                     size_t r2 = 0, n_index = 0;
                     std::tie(r2, n_index) = *nfirst;
                     validate_indices(r2, n_index, sln.routes);
@@ -1175,7 +1202,7 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
         bool skip_to_next_customer = false;
         auto cfirst = sln.customer_owners[customer].cbegin(),
              clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst != clast; ++cfirst) {
+        SAFE_FOR(skip_to_next_customer, cfirst, clast) {
             size_t r1 = 0, c_index = 0;
             std::tie(r1, c_index) = *cfirst;
             validate_indices(r1, c_index, sln.routes);
@@ -1184,15 +1211,15 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
                 continue;
             }
             SplitInfo& split1 = sln.route_splits[r1];
-            for (size_t neighbour = 1;
-                 !skip_to_next_customer && neighbour < size; ++neighbour) {
+            size_t neighbour = 1;
+            SAFE_FOR(skip_to_next_customer, neighbour, size) {
                 if (customer == neighbour) {
                     continue;
                 }
 
                 auto nfirst = sln.customer_owners[neighbour].cbegin(),
                      nlast = sln.customer_owners[neighbour].cend();
-                for (; !skip_to_next_customer && nfirst != nlast; ++nfirst) {
+                SAFE_FOR(skip_to_next_customer, nfirst, nlast) {
                     size_t r2 = 0, n_index = 0;
                     std::tie(r2, n_index) = *nfirst;
                     validate_indices(r2, n_index, sln.routes);
@@ -1206,15 +1233,6 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
                         continue;
                     }
 
-                    // check if both customers can be exchanged
-                    if (!site_dependent(m_prob, sln.routes[r2].first,
-                                        customer) ||
-                        !site_dependent(m_prob, sln.routes[r1].first,
-                                        neighbour)) {
-                        // cannot exchange customers within forbidden route
-                        continue;
-                    }
-
                     SplitInfo& split2 = sln.route_splits[r2];
 
                     // perform exchange (just swap customer indices)
@@ -1225,6 +1243,15 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
                                                    route1.end());
                     std::vector<size_t> customers2(std::next(it2),
                                                    route2.end());
+
+                    // check if all the customers in a chain can be exchanged
+                    if (!site_dependent(m_prob, sln.routes[r2].first,
+                                        customers1) ||
+                        !site_dependent(m_prob, sln.routes[r1].first,
+                                        customers2)) {
+                        continue;
+                    }
+
                     // FIXME: allow such moves?
                     if (m_enable_splits && split2.has_any(customers1)) {
                         continue;
@@ -1583,7 +1610,7 @@ void LocalSearchMethods::merge_splits(Solution& sln) {
         bool skip_to_next_customer = false;
         auto cfirst1 = sln.customer_owners[customer].cbegin(),
              clast = sln.customer_owners[customer].cend();
-        for (; !skip_to_next_customer && cfirst1 != clast; ++cfirst1) {
+        SAFE_FOR(skip_to_next_customer, cfirst1, clast) {
             size_t r_in = 0, c_in = 0;
             std::tie(r_in, c_in) = *cfirst1;
             validate_indices(r_in, c_in, sln.routes);
@@ -1594,7 +1621,7 @@ void LocalSearchMethods::merge_splits(Solution& sln) {
             SplitInfo& split_in = sln.route_splits[r_in];
 
             auto cfirst2 = sln.customer_owners[customer].cbegin();
-            for (; !skip_to_next_customer && cfirst2 != clast; ++cfirst2) {
+            SAFE_FOR(skip_to_next_customer, cfirst2, clast) {
                 if (cfirst1 == cfirst2) {
                     continue;
                 }
