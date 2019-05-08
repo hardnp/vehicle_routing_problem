@@ -38,6 +38,17 @@ inline bool site_dependent(const Problem& prob, size_t vehicle,
     return allowed[vehicle];
 }
 
+// site dependency check for a vector
+inline bool site_dependent(const Problem& prob, size_t vehicle,
+                           const std::vector<size_t>& customers) {
+    for (auto c : customers) {
+        if (!site_dependent(prob, vehicle, c)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 inline Solution::CustomerIndex at(const Solution::RouteType& route, size_t i) {
     if (i >= route.size()) {
         throw std::out_of_range("i >= route size");
@@ -812,14 +823,19 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
                     continue;
                 }
 
-                // decide where to put new node: before closest or after
+                // check that neighbour is actually good: if it's a depot or
+                // site dependency is unsatisfied, cannot relocate
                 size_t neighbour = *neighbour_it_in;
-                if (neighbour == 0) {
+                if (neighbour == 0 ||
+                    !site_dependent(m_prob, sln.routes[r_in].first,
+                                    neighbour)) {
                     sln.routes[r_in].second = std::move(route_in_orig);
                     split_in.split_info[customer] = erased_ratio;
                     split_out.split_info.at(customer) -= erased_ratio;
                     continue;
                 }
+
+                // decide where to put new node: before closest or after
                 if (loop_occured) {
                     // if route_in is loop, there's only one possibility
                     route_in.insert(std::next(neighbour_it_out), neighbour);
@@ -1217,15 +1233,6 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
                         continue;
                     }
 
-                    // check if both customers can be exchanged
-                    if (!site_dependent(m_prob, sln.routes[r2].first,
-                                        customer) ||
-                        !site_dependent(m_prob, sln.routes[r1].first,
-                                        neighbour)) {
-                        // cannot exchange customers within forbidden route
-                        continue;
-                    }
-
                     SplitInfo& split2 = sln.route_splits[r2];
 
                     // perform exchange (just swap customer indices)
@@ -1236,6 +1243,15 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
                                                    route1.end());
                     std::vector<size_t> customers2(std::next(it2),
                                                    route2.end());
+
+                    // check if all the customers in a chain can be exchanged
+                    if (!site_dependent(m_prob, sln.routes[r2].first,
+                                        customers1) ||
+                        !site_dependent(m_prob, sln.routes[r1].first,
+                                        customers2)) {
+                        continue;
+                    }
+
                     // FIXME: allow such moves?
                     if (m_enable_splits && split2.has_any(customers1)) {
                         continue;
