@@ -13,6 +13,7 @@
 #include <iterator>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 
 namespace {
 class FileHandler {
@@ -51,6 +52,57 @@ void print_fmt(double objective, int violated_time,
                vrp::TransportationQuantity violated_q, bool satisfies_sd) {
     LOG_DEBUG << " SOLUTION: " << objective << " | " << violated_time << " | "
               << violated_q << " | " << satisfies_sd << EOL;
+}
+
+std::string
+pairs(const std::vector<std::pair<vrp::Solution::VehicleIndex,
+                                  vrp::Solution::RouteType>>& routes) {
+    std::stringstream ss;
+    for (const auto& p : routes) {
+        ss << p.first << " ";
+    }
+    return ss.str();
+}
+
+void print_fmt(const vrp::Problem& prob, double objective, double cost_function,
+               const std::vector<std::pair<vrp::Solution::VehicleIndex,
+                                           vrp::Solution::RouteType>>& routes,
+               bool satisfies_all) {
+    std::unordered_map<size_t, size_t> count_per_type;
+    auto find_type = [&prob](size_t vehicle) {
+        const auto& types = prob.vehicle_types();
+        for (size_t i = 0, size = types.size(); i < size; ++i) {
+            if (types[i].avail_vehicles[vehicle]) {
+                return i;
+            }
+        }
+        return 0UL;
+    };
+    for (const auto& p : routes) {
+        count_per_type[find_type(p.first)]++;
+    }
+    auto counts_to_str = [&prob](std::unordered_map<size_t, size_t>& ct) {
+        std::stringstream ss;
+        std::vector<std::pair<size_t, size_t>> counts;
+        counts.reserve(ct.size());
+        for (auto& p : ct) {
+            counts.emplace_back(std::move(p));
+        }
+        const auto& types = prob.vehicle_types();
+        std::sort(
+            counts.begin(), counts.end(),
+            [&prob, &types](const auto& a, const auto& b) {
+                return prob.vehicles[types[a.first].vehicles[0]].fixed_cost <
+                       prob.vehicles[types[b.first].vehicles[0]].fixed_cost;
+            });
+        for (const auto& p : counts) {
+            ss << p.first << ": " << p.second << " ";
+        }
+        return ss.str();
+    };
+    LOG_DEBUG << " STATS: " << objective << " | " << cost_function << " | "
+              << routes.size() << " | " << counts_to_str(count_per_type)
+              << " | " << satisfies_all << EOL;
 }
 
 void deduplicate(const vrp::Problem& prob, std::vector<vrp::Solution>& slns) {
@@ -166,10 +218,13 @@ int main(int argc, char* argv[]) {
     if (print_debug_info) {
         print_main_info(problem, best_sln, "Improved");
         print_fmt(
-            cost_function(problem, best_sln),
+            objective(problem, best_sln),
             vrp::constraints::total_violated_time(problem, best_sln),
             vrp::constraints::total_violated_capacity(problem, best_sln),
             vrp::constraints::satisfies_site_dependency(problem, best_sln));
+        print_fmt(problem, objective(problem, best_sln),
+                  cost_function(problem, best_sln), best_sln.routes,
+                  vrp::constraints::satisfies_all(problem, best_sln));
     }
 
     return 0;
