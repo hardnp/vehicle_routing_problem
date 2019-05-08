@@ -187,7 +187,7 @@ def write_max_violated_soft_tw(io_stream):
 
 def write_max_splits(io_stream):
     """Write max number of splits per customer into provided stream"""
-    io_stream.write('value max_splits\n1\n')
+    io_stream.write('value max_splits\n2\n')
 
 
 def main():
