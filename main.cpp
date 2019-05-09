@@ -49,9 +49,11 @@ void print_main_info(const vrp::Problem& prob, const vrp::Solution& sln,
 }
 
 void print_fmt(double objective, int violated_time,
-               vrp::TransportationQuantity violated_q, bool satisfies_sd) {
+               vrp::TransportationQuantity violated_q, size_t num_routes,
+               bool satisfies_all) {
     LOG_DEBUG << " SOLUTION: " << objective << " | " << violated_time << " | "
-              << violated_q << " | " << satisfies_sd << EOL;
+              << violated_q << " | " << num_routes << " | " << satisfies_all
+              << EOL;
 }
 
 std::string
@@ -217,11 +219,11 @@ int main(int argc, char* argv[]) {
 
     if (print_debug_info) {
         print_main_info(problem, best_sln, "Improved");
-        print_fmt(
-            objective(problem, best_sln),
-            vrp::constraints::total_violated_time(problem, best_sln),
-            vrp::constraints::total_violated_capacity(problem, best_sln),
-            vrp::constraints::satisfies_site_dependency(problem, best_sln));
+        print_fmt(objective(problem, best_sln),
+                  vrp::constraints::total_violated_time(problem, best_sln),
+                  vrp::constraints::total_violated_capacity(problem, best_sln),
+                  best_sln.routes.size(),
+                  vrp::constraints::satisfies_all(problem, best_sln));
         print_fmt(problem, objective(problem, best_sln),
                   cost_function(problem, best_sln), best_sln.routes,
                   vrp::constraints::satisfies_all(problem, best_sln));
