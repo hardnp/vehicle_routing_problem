@@ -10,7 +10,7 @@ from collections import defaultdict
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__)) + '/../'
 SEARCH_PATTERN = re.compile(
-    r'\[(?P<csv>.*.csv)\]:\s(?P<obj>.*)\s\|.*\|\s\{.*\}',
+    r'\[(?P<csv>.*.csv)\]:\s(?P<obj>.*)\s\|.*\|\s\{.*\}.*',
     re.DOTALL)
 
 
