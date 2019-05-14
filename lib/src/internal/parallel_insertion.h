@@ -3,8 +3,12 @@
 #include "problem.h"
 #include "solution.h"
 
+#include <cstdint>
+#include <vector>
+
 namespace vrp {
     namespace detail {
-        Solution parallel_insertion(const Problem& prob, const size_t count);
+        std::vector<Solution> parallel_insertion(const Problem& prob,
+                                                    size_t count);
     }  // namespace detail
 }  // namespace vrp

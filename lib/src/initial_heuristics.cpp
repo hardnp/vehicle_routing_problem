@@ -2,6 +2,7 @@
 
 #include "src/internal/cluster_first_route_second.h"
 #include "src/internal/savings.h"
+#include "src/internal/parallel_insertion.h"
 
 namespace vrp {
 namespace {
@@ -34,7 +35,8 @@ std::vector<Solution> create_initial_solutions(const Problem& prob,
     case InitialHeuristic::Insertion:
         return {};
     case InitialHeuristic::ParallelInsertion:
-        return {};
+        return fill_splits(prob, detail::parallel_insertion(prob, count),
+                           fill_with_default);
     case InitialHeuristic::ClusterFirstRouteSecond:
         return fill_splits(prob,
                            detail::cluster_first_route_second(prob, count),
