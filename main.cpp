@@ -146,7 +146,8 @@ int main(int argc, char* argv[]) {
     auto problem = parser.read(input.get());
 
     std::vector<vrp::InitialHeuristic> initial_heuristics = {
-        vrp::InitialHeuristic::Savings, vrp::InitialHeuristic::Insertion,
+        vrp::InitialHeuristic::Savings,
+        vrp::InitialHeuristic::Insertion,
         vrp::InitialHeuristic::ParallelInsertion,
         vrp::InitialHeuristic::ClusterFirstRouteSecond};
 
