@@ -14,7 +14,7 @@
 
 namespace utility {
     template <typename T, typename = std::enable_if_t<std::is_integral<T>::value, T>, typename U = std::mt19937>
-    T random_(T upper_bound = std::numeric_limits<T>::max()) {
+    T random(T upper_bound = std::numeric_limits<T>::max()) {
         static U generator { std::random_device{}() };
         return generator() % upper_bound;
     }
