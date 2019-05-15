@@ -18,9 +18,10 @@ class LocalSearchMethods {
     std::vector<double> m_best_values =
         std::vector<double>(6, std::numeric_limits<double>::max());
 
-    double m_tw_penalty = 0.0;      ///< penalty for time windows violation
-    bool m_can_violate_tw = false;  ///< flag to specify if TW can be violated
-    bool m_enable_splits = false;   ///< flag to enable split delivery
+    double m_tw_penalty = 0.0;       ///< penalty for time windows violation
+    bool m_can_violate_tw = false;   ///< flag to specify if TW can be violated
+    bool m_enable_splits = false;    ///< flag to enable split delivery
+    uint32_t m_bad_moves_iters = 0;  ///< iterations to allow bad moves for
     SplitInfo m_default_split_info = {};  ///< default split info
 
     bool m_explore_all_neighbourhoods =
@@ -57,6 +58,12 @@ public:
     // time windows management:
     void penalize_tw(double value);
     void violate_tw(bool value);
+
+    // allowing bad moves:
+    void allow_bad_moves_for(uint32_t value) noexcept;
+    bool can_do_bad_move() const noexcept;
+    bool can_do_bad_move(double new_cost, double old_cost) const noexcept;
+    void step() noexcept;
 };
 }  // namespace tabu
 }  // namespace vrp

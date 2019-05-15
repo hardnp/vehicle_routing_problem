@@ -14,7 +14,7 @@
 // can be overriden from the outside
 #ifndef TABU_TENURE
 #define TABU_TENURE 15
-#define PRESERVE_TENURE 7
+#define PRESERVE_TENURE 15
 #endif
 
 namespace vrp {
@@ -152,6 +152,8 @@ public:
     preserve_list_t pr_relocate_split = {};
     preserve_list_t pr_relocate_new_route = {};
 
+    preserve_list_t pr_common = {};
+
     TabuLists& operator--() {
         exchange.decrement();
         relocate.decrement();
@@ -166,6 +168,8 @@ public:
         pr_cross.decrement();
         pr_relocate_split.decrement();
         pr_relocate_new_route.decrement();
+
+        pr_common.decrement();
 
         return *this;
     }
@@ -184,6 +188,8 @@ public:
         pr_cross.clear();
         pr_relocate_split.clear();
         pr_relocate_new_route.clear();
+
+        pr_common.clear();
     }
 };
 

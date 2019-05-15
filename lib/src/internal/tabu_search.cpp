@@ -27,6 +27,7 @@ constexpr const uint32_t MAX_ITERS = 10 * TABU_SEARCH_ITERS;
 constexpr const uint32_t ROUTE_SAVING_ITERS = 5 * MULTIPLIER;
 constexpr const uint32_t MERGE_SPLITS_ITERS = 10 * MULTIPLIER;
 constexpr const uint32_t INTRA_RELOCATION_ITERS = 15 * MULTIPLIER;
+constexpr const uint32_t BAD_MOVES_ITERS = 10 * MULTIPLIER;
 constexpr const double TIME_WINDOWS_PENALTY_BASE = 1.2;
 
 constexpr const uint32_t CONSTRAINTS_FIX_ITERS = 0.1 * TABU_SEARCH_ITERS;
@@ -35,6 +36,7 @@ constexpr const uint32_t MAX_VIOLATION_ITERS = 3;
 
 void update_tabu_lists(tabu::TabuLists& lists, const tabu::TabuLists& new_lists,
                        size_t i) {
+    lists.pr_common = std::move(new_lists.pr_common);
     switch (i) {
     case 0:
         lists.relocate = new_lists.relocate;
@@ -74,13 +76,14 @@ uint32_t threshold(const Problem& prob) {
     return std::max(1u, static_cast<uint32_t>(prob.n_customers() * 0.05)) + 2u;
 }
 
-inline void do_local_search(const tabu::LocalSearchMethods& ls,
+inline void do_local_search(tabu::LocalSearchMethods& ls,
                             std::vector<Solution>& slns, tabu::TabuLists& lists,
                             std::vector<bool>& was_improved) {
     assert(slns.size() == ls.size());
     for (size_t m = 0, size = ls.size(); m != size; ++m) {
         was_improved[m] = ls[m](slns[m], lists);
     }
+    ls.step();
 }
 
 inline std::vector<Solution> repeat(const Solution& sln, size_t times) {
@@ -120,7 +123,7 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     const auto route_saving_threshold = threshold(prob);
 
     tabu::LocalSearchMethods ls(prob);
-    ls.violate_tw(true);
+    ls.violate_tw(false);
 
     Solution best_sln = initial_sln;
 
@@ -132,7 +135,7 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
     // keep track of best feasible solution as well
     Solution best_feasible_sln = best_sln;
 
-    const auto sqr_objective_baseline = std::pow(objective(prob, best_sln), 2);
+    const auto objective_baseline = std::pow(objective(prob, best_sln), 1.2);
 
     std::vector<Solution> slns = repeat(best_sln, ls.size());
     std::vector<bool> was_improved(ls.size(), false);
@@ -159,7 +162,7 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
 
         --constraints_count;
         if (!constraints_count) {
-            ls.penalize_tw(sqr_objective_baseline);
+            ls.penalize_tw(objective_baseline);
             constraints_count = CONSTRAINTS_FIX_ITERS;
         }
 
@@ -242,11 +245,18 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
 #endif
 
         slns = repeat(curr_sln, ls.size());
+
+        if (std::all_of(was_improved.cbegin(), was_improved.cend(),
+                        [](bool v) { return !v; }) &&
+            i > INTRA_RELOCATION_ITERS * 2 && !ls.can_do_bad_move()) {
+            ls.allow_bad_moves_for(BAD_MOVES_ITERS);
+        }
     }
 
     thread_local const auto do_post_optimization = [&](Solution& best_sln) {
         // post-optimization phase. drastically penalize for TW violation
-        ls.penalize_tw(sqr_objective_baseline);
+        ls.penalize_tw(objective_baseline);
+        ls.allow_bad_moves_for(0);
 
         auto curr_sln = best_sln;
 

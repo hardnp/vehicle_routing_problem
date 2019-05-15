@@ -20,6 +20,7 @@ namespace vrp {
 namespace tabu {
 namespace {
 #define USE_PRESERVE_ENTRIES 1
+#define USE_TABU_ENTRIES 0
 
 #define SORT_HEURISTIC_OPERANDS 0
 
@@ -570,15 +571,26 @@ bool LocalSearchMethods::relocate(Solution& sln, TabuLists& lists,
                               m_prob, split_out, route_out.cbegin(),
                               route_out.cend()) != 0));
 
+                    impossible_move |= lists.pr_common.has(customer, neighbour);
+
+                    const bool good_move =
+                        cost_after < cost_before ||
+                        (can_do_bad_move(cost_after, cost_before));
+
                     // decide whether move is good
-                    if (!impossible_move && cost_after < cost_before) {
+                    if (!impossible_move && good_move) {
                         // move is good
                         sln.customer_owners[customer].erase(r_in);
                         sln.update_customer_owners(m_prob, r_in, c_index);
                         sln.update_customer_owners(m_prob, r_out, n_index - 1);
+#if USE_TABU_ENTRIES
                         lists.relocate.emplace(customer, r_in);
+#endif
 #if USE_PRESERVE_ENTRIES
-                        lists.pr_relocate.emplace(customer, r_out);
+                        if (can_do_bad_move() && cost_after > cost_before) {
+                            // lists.pr_relocate.emplace(customer, r_out);
+                            lists.pr_common.emplace(neighbour, customer);
+                        }
 #endif
                         best_ever_value = std::min(best_ever_value, cost_after);
                         improved = true;
@@ -694,21 +706,31 @@ bool LocalSearchMethods::relocate_new_route(Solution& sln, TabuLists& lists,
                 distance_on_route(m_prob, split_out, m_tw_penalty,
                                   std::prev(it_out), std::next(it_out, 2));
 
-            const bool impossible_move =
+            bool impossible_move =
                 lists.pr_relocate_new_route.has(customer, r_in) &&
                 cost_after >= best_ever_value;
 
+            impossible_move |= lists.pr_common.has(customer, 0);
+
+            const bool good_move = cost_after < cost_before ||
+                                   (can_do_bad_move(cost_after, cost_before));
+
             // decide whether move is good
-            if (!impossible_move && cost_after < cost_before) {
+            if (!impossible_move && good_move) {
                 // move is good
                 size_t r_out = sln.routes.size() - 1;
                 sln.customer_owners[customer].erase(r_in);
                 sln.update_customer_owners(m_prob, r_in, c_index);
                 sln.update_customer_owners(m_prob, r_out);
                 sln.used_vehicles.emplace(used_vehicle);
+#if USE_TABU_ENTRIES
                 lists.relocate_new_route.emplace(customer, r_in);
+#endif
 #if USE_PRESERVE_ENTRIES
-                lists.pr_relocate_new_route.emplace(customer, r_out);
+                if (can_do_bad_move() && cost_after > cost_before) {
+                    // lists.pr_relocate_new_route.emplace(customer, r_out);
+                    lists.pr_common.emplace(0, customer);
+                }
 #endif
                 best_ever_value = cost_after;
                 improved = true;
@@ -927,16 +949,27 @@ bool LocalSearchMethods::relocate_split(Solution& sln, TabuLists& lists,
 
                 impossible_move |= impossible_relocate;
 
+                impossible_move |= lists.pr_common.has(customer, neighbour);
+
+                const bool good_move =
+                    cost_after < cost_before ||
+                    (can_do_bad_move(cost_after, cost_before));
+
                 // decide whether move is good
-                if (!impossible_move && cost_after < cost_before) {
+                if (!impossible_move && good_move) {
                     // move is good
                     sln.customer_owners[customer].erase(r_in);
                     sln.update_customer_owners(m_prob, r_in);
+#if USE_TABU_ENTRIES
                     lists.relocate_split.emplace(customer, r_in);
                     lists.relocate_split.emplace(neighbour, r_out);
+#endif
 #if USE_PRESERVE_ENTRIES
-                    lists.pr_relocate_split.emplace(customer, r_out);
-                    lists.pr_relocate_split.emplace(neighbour, r_in);
+                    if (can_do_bad_move() && cost_after > cost_before) {
+                        // lists.pr_relocate_split.emplace(customer, r_out);
+                        // lists.pr_relocate_split.emplace(neighbour, r_in);
+                        lists.pr_common.emplace(neighbour, customer);
+                    }
 #endif
                     best_ever_value = std::min(best_ever_value, cost_after);
                     improved = true;
@@ -1087,18 +1120,29 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
                                              m_prob, split2, route2.cbegin(),
                                              route2.cend()) != 0));
 
+                    impossible_move |= lists.pr_common.has(customer, neighbour);
+
+                    const bool good_move =
+                        cost_after < cost_before ||
+                        (can_do_bad_move(cost_after, cost_before));
+
                     // decide whether move is good
-                    if (!impossible_move && cost_after < cost_before) {
+                    if (!impossible_move && good_move) {
                         // move is good
                         sln.customer_owners[customer].erase(r1);
                         sln.customer_owners[neighbour].erase(r2);
                         sln.customer_owners[customer][r2] = n_index;
                         sln.customer_owners[neighbour][r1] = c_index;
+#if USE_TABU_ENTRIES
                         lists.exchange.emplace(customer, r1);
                         lists.exchange.emplace(neighbour, r2);
+#endif
 #if USE_PRESERVE_ENTRIES
-                        lists.pr_exchange.emplace(customer, r2);
-                        lists.pr_exchange.emplace(neighbour, r1);
+                        if (can_do_bad_move() && cost_after > cost_before) {
+                            // lists.pr_exchange.emplace(customer, r2);
+                            // lists.pr_exchange.emplace(neighbour, r1);
+                            lists.pr_common.emplace(neighbour, customer);
+                        }
 #endif
                         best_ever_value = std::min(best_ever_value, cost_after);
                         improved = true;
@@ -1165,14 +1209,26 @@ bool LocalSearchMethods::two_opt(Solution& sln, TabuLists& lists,
                                              m_prob, split, route.cbegin(),
                                              route.cend()) != 0));
 
+                    impossible_move |=
+                        lists.pr_common.has(customer_k, customer_i);
+
+                    const bool good_move =
+                        cost_after < cost_before ||
+                        (can_do_bad_move(cost_after, cost_before));
+
                     // decide whether move is good
-                    if (!impossible_move && cost_after < cost_before) {
+                    if (!impossible_move && good_move) {
                         // move is good
                         found_new_best = true;
+#if USE_TABU_ENTRIES
                         // forbid previously existing edges
                         lists.two_opt.emplace(customer_i, customer_k);
+#endif
 #if USE_PRESERVE_ENTRIES
-                        lists.pr_two_opt.emplace(customer_k, customer_i);
+                        // if (can_do_bad_move() && cost_after > cost_before) {
+                        // lists.pr_two_opt.emplace(customer_k, customer_i);
+                        lists.pr_common.emplace(customer_k, customer_i);
+                        // }
 #endif
                         best_ever_value = std::min(best_ever_value, cost_after);
                         improved = true;
@@ -1330,8 +1386,14 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
                                              m_prob, split2, route2.cbegin(),
                                              route2.cend()) != 0));
 
+                    impossible_move |= lists.pr_common.has(customer, neighbour);
+
+                    const bool good_move =
+                        cost_after < cost_before ||
+                        (can_do_bad_move(cost_after, cost_before));
+
                     // decide whether move is good
-                    if (!impossible_move && cost_after < cost_before) {
+                    if (!impossible_move && good_move) {
                         // move is good
                         for (size_t c1 : customers1) {
                             sln.customer_owners[c1].erase(r1);
@@ -1341,11 +1403,16 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
                         }
                         sln.update_customer_owners(m_prob, r1, c_index);
                         sln.update_customer_owners(m_prob, r2, n_index);
+#if USE_TABU_ENTRIES
                         lists.cross.emplace(customer, customer_next);
                         lists.cross.emplace(neighbour, neighbour_next);
+#endif
 #if USE_PRESERVE_ENTRIES
-                        lists.pr_cross.emplace(customer, neighbour_next);
-                        lists.pr_cross.emplace(neighbour, customer_next);
+                        if (can_do_bad_move() && cost_after > cost_before) {
+                            // lists.pr_cross.emplace(customer, neighbour_next);
+                            // lists.pr_cross.emplace(neighbour, customer_next);
+                            lists.pr_common.emplace(neighbour, customer);
+                        }
 #endif
                         best_ever_value = std::min(best_ever_value, cost_after);
                         improved = true;
@@ -1521,8 +1588,12 @@ void LocalSearchMethods::route_save(Solution& sln, size_t threshold) {
                               m_prob, split_out, route_out.cbegin(),
                               route_out.cend()) != 0));
 
+                    const bool good_move =
+                        cost_after < cost_before ||
+                        (can_do_bad_move(cost_after, cost_before));
+
                     // decide whether move is good
-                    if (!impossible_move && cost_after < cost_before) {
+                    if (!impossible_move && good_move) {
                         // move is good
                         sln.customer_owners[customer].erase(r_in);
                         sln.update_customer_owners(m_prob, r_in, c_index);
@@ -1670,8 +1741,12 @@ void LocalSearchMethods::merge_splits(Solution& sln) {
                                          m_prob, split_out, route_out.cbegin(),
                                          route_out.cend()) != 0));
 
+                const bool good_move =
+                    cost_after < cost_before ||
+                    (can_do_bad_move(cost_after, cost_before));
+
                 // decide whether move is good
-                if (!impossible_move && cost_after < cost_before) {
+                if (!impossible_move && good_move) {
                     // move is good
                     sln.customer_owners[customer].erase(r_in);
                     sln.update_customer_owners(m_prob, r_in, c_in);
@@ -1690,6 +1765,30 @@ void LocalSearchMethods::merge_splits(Solution& sln) {
 }
 
 void LocalSearchMethods::penalize_tw(double value) { m_tw_penalty = value; }
+
 void LocalSearchMethods::violate_tw(bool value) { m_can_violate_tw = value; }
+
+void LocalSearchMethods::allow_bad_moves_for(uint32_t value) noexcept {
+    m_bad_moves_iters = value;
+}
+
+bool LocalSearchMethods::can_do_bad_move() const noexcept {
+    return m_bad_moves_iters > 0;
+}
+
+bool LocalSearchMethods::can_do_bad_move(double new_cost, double old_cost) const
+    noexcept {
+    // degradation must not be more than THR%
+    constexpr const double THR = 0.01;
+    // expect relative change in cost to be no more than THR
+    return can_do_bad_move() &&
+           (new_cost - old_cost) / (new_cost + 0.0001) <= THR;
+}
+
+void LocalSearchMethods::step() noexcept {
+    if (m_bad_moves_iters > 0) {
+        --m_bad_moves_iters;
+    }
+}
 }  // namespace tabu
 }  // namespace vrp
