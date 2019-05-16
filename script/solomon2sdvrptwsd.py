@@ -19,6 +19,9 @@ def parse_args():
         description='Solomon to CSV instance converter')
     parser.add_argument('instances', nargs='+',
                         help='Solomon instance file(s)')
+    parser.add_argument('--max-splits', type=int, choices=range(1, 4),
+                        default=1,
+                        help='Maximum number of splits for customer')
     return parser.parse_args()
 
 
@@ -185,9 +188,10 @@ def write_max_violated_soft_tw(io_stream):
     io_stream.write('value max_violated_soft_tw\n0\n')
 
 
-def write_max_splits(io_stream):
+def write_max_splits(io_stream, max_splits):
     """Write max number of splits per customer into provided stream"""
-    io_stream.write('value max_splits\n1\n')
+    io_stream.write('value max_splits\n')
+    io_stream.write('{value}\n'.format(value=max_splits))
 
 
 def main():
@@ -221,7 +225,7 @@ def main():
             csv_file.write('\n')
             write_max_violated_soft_tw(csv_file)
             csv_file.write('\n')
-            write_max_splits(csv_file)
+            write_max_splits(csv_file, args.max_splits)
             csv_file.write('\n')
     return 0
 
