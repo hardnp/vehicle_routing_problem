@@ -5,6 +5,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <ostream>
 
 namespace vrp {
 namespace constraints {
@@ -21,9 +22,7 @@ inline int total_violated_time(const Problem& prob, const SplitInfo& info,
         throw std::runtime_error("unable to count violated time");
     }
 
-    // TODO: is round() good enough here?
     const auto service_time = [&info](const Customer& c) -> int {
-        // TODO: unordered_map::at() is sufficient?
         return static_cast<int>(std::ceil(info.at(c.id) * c.service_time));
     };
 
@@ -38,12 +37,21 @@ inline int total_violated_time(const Problem& prob, const SplitInfo& info,
         assert(static_cast<size_t>(c.id) == *first);
         assert(static_cast<size_t>(next_c.id) == *next_first);
 
-        // c.hard_tw[0] + c.service + distance(c, next_c) + next_c.service
+        // c.hard_tw[0] + c.service + distance(c, next_c) + W* + next_c.service
         // <=
         // next_c.hard_tw[1]
+        //
+        // * - W is the wait time if vehicle arrived to next_c earlier than
+        //     next_c.hard_tw[0]
         int spent_time_on_c =
             start_time + service_time(c) + prob.costs[*first][*next_first];
-        start_time = std::max(spent_time_on_c, next_c.hard_tw.first);
+
+        // include waiting for next_c TW start
+        spent_time_on_c = std::max(spent_time_on_c, next_c.hard_tw.first);
+
+        // new start time on next_c is spent_time_on_c
+        start_time = spent_time_on_c;
+
         spent_time_on_c += service_time(next_c);
 
         violated_time += std::max(0, spent_time_on_c - next_c.hard_tw.second);
@@ -91,6 +99,19 @@ inline bool satisfies_time_windows(const Problem& prob, const Solution& sln) {
     return total_violated_time(prob, sln) == 0;
 }
 
-bool satisfies_all(const Problem& prob, const Solution& sln);
+bool satisfies_vehicle_uniqueness(const Problem& prob, const Solution& sln);
+
+inline bool satisfies_routes_limit(const Problem& prob, const Solution& sln) {
+    return prob.n_vehicles() >= sln.routes.size();
+}
+
+bool satisfies_customers_service(const Problem& prob, const Solution& sln);
+
+bool satisfies_split_delivery(const Problem& prob, const Solution& sln);
+
+/// Returns whether given solution satisfies all constraints, optionally writing
+/// unsatisfied constraints to err stream (if err is not nullptr)
+bool satisfies_all(const Problem& prob, const Solution& sln,
+                   std::ostream* err = nullptr);
 }  // namespace constraints
 }  // namespace vrp

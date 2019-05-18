@@ -219,14 +219,20 @@ int main(int argc, char* argv[]) {
 
     if (print_debug_info) {
         print_main_info(problem, best_sln, "Improved");
+        bool satisfies_all = vrp::constraints::satisfies_all(problem, best_sln);
         print_fmt(objective(problem, best_sln),
                   vrp::constraints::total_violated_time(problem, best_sln),
                   vrp::constraints::total_violated_capacity(problem, best_sln),
-                  best_sln.routes.size(),
-                  vrp::constraints::satisfies_all(problem, best_sln));
+                  best_sln.routes.size(), satisfies_all);
         print_fmt(problem, objective(problem, best_sln),
                   cost_function(problem, best_sln), best_sln.routes,
-                  vrp::constraints::satisfies_all(problem, best_sln));
+                  satisfies_all);
+        if (!satisfies_all) {
+            std::cout << "-------------------------" << EOL;
+            vrp::constraints::satisfies_all(problem, best_sln, &std::cerr);
+        } else {
+            LOG_DEBUG << "All constraints satisfied" << EOL;
+        }
     }
 
     return 0;
