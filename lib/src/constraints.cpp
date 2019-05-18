@@ -7,6 +7,7 @@
 #include <set>
 #include <type_traits>
 #include <unordered_map>
+#include <string>
 
 namespace vrp {
 namespace constraints {
