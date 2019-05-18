@@ -13,6 +13,8 @@ namespace vrp {
                                                     size_t count) {
             std::vector<Solution> solution;
 
+            // TODO: add for cycle for count > 1 (to run multiple tests)
+
             // amount of customers (without depo)
             const auto cust_amount = prob.customers.size - 1;
 
@@ -52,7 +54,7 @@ namespace vrp {
 
             std::vector<Splt_cust> splited_customers;
 
-            i = 0;
+            unsigned int i = 0;
             while(*biggest_veh_pointer < prob.customers[i].demand.volume){
                 if(max_splits > 0){
                     splited_customers.push_back({prob.customers[i].id,
@@ -81,7 +83,19 @@ namespace vrp {
                           b.fixed_cost/b.capacity.volume;
                       });
 
+            // sum all customers demands size
+            size_t demand_sum = 0;
+            for(i = 1; i < cust_amount+1; i++){
+                demand_sum += prob.customers[i].demand.value;
+            }
 
+            // find an amount of needed cars for the solution
+            unsigned int needed_veh = 0;
+            size_t cap_sum = 0;
+            while(cap_sum < demand_sum){
+                cap_sum += prob.vehicles[needed_veh].capacity.volume;
+                needed_veh++;
+            }
 
 
 
