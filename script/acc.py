@@ -10,7 +10,7 @@ from collections import defaultdict
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__)) + '/../'
 RESULT_PATTERN = re.compile(
-    r'.*SOLUTION:\s*(?P<data>\d+\.\d+ \| \d+ \| \{.*\} \| \d+ \| \d).*',
+    r'.*SOLUTION:\s*(?P<data>\d+.*)',
     re.DOTALL)
 
 

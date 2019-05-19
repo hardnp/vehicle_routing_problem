@@ -249,6 +249,7 @@ Solution tabu_search(const Problem& prob, const Solution& initial_sln) {
         if (std::all_of(was_improved.cbegin(), was_improved.cend(),
                         [](bool v) { return !v; }) &&
             i > INTRA_RELOCATION_ITERS * 2 && !ls.can_do_bad_move()) {
+            lists = tabu::TabuLists();
             ls.allow_bad_moves_for(BAD_MOVES_ITERS);
         }
     }
