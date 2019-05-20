@@ -109,6 +109,8 @@ bool satisfies_customers_service(const Problem& prob, const Solution& sln);
 
 bool satisfies_split_delivery(const Problem& prob, const Solution& sln);
 
+bool satisfies_depots(const Problem& prob, const Solution& sln);
+
 /// Returns whether given solution satisfies all constraints, optionally writing
 /// unsatisfied constraints to err stream (if err is not nullptr)
 bool satisfies_all(const Problem& prob, const Solution& sln,

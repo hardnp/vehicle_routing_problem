@@ -164,6 +164,23 @@ bool satisfies_split_delivery(const Problem& prob, const Solution& sln) {
     }
 }
 
+bool satisfies_depots(const Problem& prob, const Solution& sln) {
+    static constexpr const size_t depot = 0;
+    for (const auto& p : sln.routes) {
+        const auto& route = p.second;
+        if (route.front() != depot || route.back() != depot) {
+            return false;
+        }
+        for (auto i = std::next(route.cbegin()), last = std::prev(route.cend());
+             i != last; ++i) {
+            if (*i == depot) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool satisfies_all(const Problem& prob, const Solution& sln,
                    std::ostream* err) {
     static const std::vector<
@@ -174,7 +191,8 @@ bool satisfies_all(const Problem& prob, const Solution& sln,
                     {"vehicle uniqueness", satisfies_vehicle_uniqueness},
                     {"customers service", satisfies_customers_service},
                     {"routes limit", satisfies_routes_limit},
-                    {"split delivery", satisfies_split_delivery}};
+                    {"split delivery", satisfies_split_delivery},
+                    {"depots", satisfies_depots}};
 
     bool satisfied = true;
     for (const auto& checker : checkers) {
