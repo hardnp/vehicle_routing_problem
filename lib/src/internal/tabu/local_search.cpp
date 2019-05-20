@@ -1078,9 +1078,6 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
                     auto it1 = atit(route1, c_index),
                          it2 = atit(route2, n_index);
 
-                    size_t customer_next = *std::next(it1),
-                           neighbour_next = *std::next(it2);
-
                     const auto cost_before = paired_distance_on_route(
                         m_prob, split1, split2, m_tw_penalty, it1, it2);
 
@@ -1133,10 +1130,8 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
                                              m_prob, split2, route2.cbegin(),
                                              route2.cend()) != 0));
 
-                    impossible_move |=
-                        can_do_bad_move() &&
-                        (lists.pr_common.has(customer, customer_next) ||
-                         lists.pr_common.has(neighbour, neighbour_next));
+                    impossible_move |= can_do_bad_move() &&
+                                       lists.pr_common.has(customer, neighbour);
 
                     const bool good_move =
                         cost_after < cost_before ||
@@ -1159,8 +1154,7 @@ bool LocalSearchMethods::exchange(Solution& sln, TabuLists& lists,
 #endif
 #if USE_PRESERVE_ENTRIES
                         if (can_do_bad_move() && cost_after > cost_before) {
-                            lists.pr_common.emplace(neighbour, customer_next);
-                            lists.pr_common.emplace(customer, neighbour_next);
+                            lists.pr_common.emplace(neighbour, customer);
                         }
 #endif
                         best_ever_value = std::min(best_ever_value, cost_after);
@@ -1408,10 +1402,8 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
                                              m_prob, split2, route2.cbegin(),
                                              route2.cend()) != 0));
 
-                    impossible_move |=
-                        can_do_bad_move() &&
-                        (lists.pr_common.has(customer, customer_next) ||
-                         lists.pr_common.has(neighbour, neighbour_next));
+                    impossible_move |= can_do_bad_move() &&
+                                       lists.pr_common.has(customer, neighbour);
 
                     const bool good_move =
                         cost_after < cost_before ||
@@ -1438,8 +1430,7 @@ bool LocalSearchMethods::cross(Solution& sln, TabuLists& lists,
 #endif
 #if USE_PRESERVE_ENTRIES
                         if (can_do_bad_move() && cost_after > cost_before) {
-                            lists.pr_common.emplace(customer, neighbour_next);
-                            lists.pr_common.emplace(neighbour, customer_next);
+                            lists.pr_common.emplace(neighbour, customer);
                         }
 #endif
                         best_ever_value = std::min(best_ever_value, cost_after);
