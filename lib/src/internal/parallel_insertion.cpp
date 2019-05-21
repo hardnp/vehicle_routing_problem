@@ -17,10 +17,11 @@ namespace vrp {
 
             // amount of customers (without depo)
             const auto cust_amount = prob.customers.size - 1;
+            const auto points = cust_amount + 1;
 
-            // enable spits and available amount of them
+            // enable spits and available amount of them for each customer
             const auto enable_splits = prob.enable_splits();
-            auto max_splits = prob.max_splits;
+            const auto max_splits = prob.max_splits;
 
             // a random number generator
             std::mt19937 r_gen;
@@ -33,7 +34,7 @@ namespace vrp {
             int the_first_customer = range(r_gen);
 
             //find the biggest vehicle
-            //int *biggest_veh_pointer; /// try to set as auto below if wouldn't work
+            //int *biggest_veh_pointer;
             auto biggest_veh_pointer = std::max_element(prob.vehicles.begin(),
                     prob.vehicles.end(), [](const Vehicle &a,
                             const Vehicle &b){
@@ -50,21 +51,21 @@ namespace vrp {
                 unsigned int id;
                 unsigned int ttl_volume;
                 unsigned int lft_volume;
+                const auto available_splits;
             };
 
             std::vector<Splt_cust> splited_customers;
-
             unsigned int i = 0;
             while(*biggest_veh_pointer < prob.customers[i].demand.volume){
-                if(max_splits > 0){
+                if(enable_splits) {
                     splited_customers.push_back({prob.customers[i].id,
                                                  prob.customers[i].demand.volume,
-                                                 prob.customers[i].demand.volume
+                                                 prob.customers[i].demand.volume,
+                                                 max_splits
                     });
-                    max_splits--;
                     i++;
                 }
-                else{
+                else {
                     std::cout << "No Solution (not enough splits)" << std::endl;
                     return 0;
                 }
@@ -85,7 +86,7 @@ namespace vrp {
 
             // sum all customers demands size
             size_t demand_sum = 0;
-            for(i = 1; i < cust_amount+1; i++){
+            for(i = 1; i < points; i++){
                 demand_sum += prob.customers[i].demand.value;
             }
 
@@ -97,7 +98,17 @@ namespace vrp {
                 needed_veh++;
             }
 
+            // visited customers
+            std::vector<size_t> visited_cust(points, 0);
+            visited_cust[0] = 1;
 
+            // used vehicles
+            std::vector<size_t> used_veh(prob.vehicles.size(), 0);
+
+            // list of routes (veh_id + customers ids)
+            std::vector<std::pair<size_t, std::vector<size_t>>> routes;
+
+            // choosing the first points for every route
 
 
 
