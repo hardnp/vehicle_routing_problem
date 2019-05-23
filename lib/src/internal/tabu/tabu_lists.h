@@ -14,7 +14,7 @@
 // can be overriden from the outside
 #ifndef TABU_TENURE
 #define TABU_TENURE 15
-#define PRESERVE_TENURE 15
+#define PRESERVE_TENURE 7
 #endif
 
 namespace vrp {
@@ -124,8 +124,10 @@ public:
 };  // namespace tabu
 
 class TabuLists {
-    using tabu_list_t = TabuList<std::pair<size_t, size_t>, TABU_TENURE>;
-    using preserve_list_t = tabu_list_t;
+    template<int Tenure>
+    using list_t = TabuList<std::pair<size_t, size_t>, Tenure>;
+    using tabu_list_t = list_t<TABU_TENURE>;
+    using preserve_list_t = list_t<PRESERVE_TENURE>;
 
 public:
     // tabu lists. each entry depends on a used heuristic
@@ -152,7 +154,7 @@ public:
     preserve_list_t pr_relocate_split = {};
     preserve_list_t pr_relocate_new_route = {};
 
-    preserve_list_t pr_common = {};
+    list_t<TABU_TENURE> pr_common = {};
 
     TabuLists& operator--() {
         exchange.decrement();
