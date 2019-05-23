@@ -78,7 +78,7 @@ void print_fmt(const vrp::Problem& prob, double objective, double cost_function,
                 return i;
             }
         }
-        return 0UL;
+        return (size_t)0UL;
     };
     for (const auto& p : routes) {
         count_per_type[find_type(p.first)]++;
