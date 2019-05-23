@@ -76,7 +76,10 @@ bool satisfies_vehicle_uniqueness(const Problem& prob, const Solution& sln) {
     return unique_vehicles.size() == sln.routes.size();
 }
 
-bool satisfies_customers_service(const Problem& prob, const Solution& sln) {
+namespace {
+template<typename CountPredicate>
+bool satisfies_customers_service_impl(const Problem& prob, const Solution& sln,
+                                      CountPredicate pred) {
     // verify that each customer is serviced and it is done only once
     std::unordered_map<size_t, size_t> customer_counts;
     customer_counts.reserve(prob.n_customers());
@@ -97,17 +100,29 @@ bool satisfies_customers_service(const Problem& prob, const Solution& sln) {
         return false;
     }
 
-    // each customer (!= depot) is serviced only once
     for (const auto& p : customer_counts) {
         if (p.first == 0) {
             continue;
         }
-        if (p.second != 1) {
+
+        if (!pred(p.second)) {
             return false;
         }
     }
 
     return true;
+}
+}  // namespace
+
+bool satisfies_customers_service(const Problem& prob, const Solution& sln) {
+    // each customer (!= depot) is serviced only once unless splits are enabled
+    if (prob.enable_splits()) {
+        auto pred = [](size_t count) { return count >= 1; };
+        return satisfies_customers_service_impl(prob, sln, pred);
+    } else {
+        auto pred = [](size_t count) { return count == 1; };
+        return satisfies_customers_service_impl(prob, sln, pred);
+    }
 }
 
 namespace {
@@ -140,6 +155,10 @@ bool satisfies_split_delivery_impl(const Problem& prob, const Solution& sln,
     // if split delivery is enabled, must check that customer is fully serviced
     if (splits_enabled) {
         for (const auto& p : ratios_per_customer) {
+            if (p.first == 0) {
+                continue;
+            }
+
             if (p.second != 1.0) {
                 return false;
             }
