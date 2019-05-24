@@ -14,23 +14,35 @@ namespace vrp {
         std::vector<Solution> solution;
 
         namespace {
+
+            // a function to find number of customer with the id in vector
+            size_t find_cust_number(std::vector<std::pair<int,
+                    size_t> > position_to_id, size_t c_id){
+                for(auto a : position_to_id){
+                    if(a.second == c_id) { unsigned int pos =  a.second}
+                }
+
+                return(pos);
+            }
+
             // a function to calculate the solution
-            bool find_the_solution (const Problem& probl, unsigned int v_needed,
+            bool find_the_solution (const Problem& probl,
+                                    const unsigned int v_needed,
                                     std::vector<std::pair<Vehicle,
                                     bool> > vehicles_lcl,
                                     std::vector<std::tuple<Customer, size_t,
                                     bool,size_t,
                                     std::vector<int>>> customers_lcl,
-                                    size_t the_firts_cust) {
+                                    const size_t the_firts_cust) {
 
                 // check if solved successfully
                 bool check = true;
 
                 // cust position in customers_lcl <-> cust id
-                // TODO: check if this will be useful
-                std::vector<std::pair<int, int> > num_to_id(customers_lcl.size());
-                for(unsigned int q=0;q < customers_lcl.size(); q++) {
-                    num_to_id[q] = {q, get<0>(customers_lcl[q]).id};
+                std::vector<std::pair<int,
+                size_t> > pos_to_id(customers_lcl.size());
+                for(int q=0; q < customers_lcl.size(); q++) {
+                    pos_to_id[q] = {q, get<0>(customers_lcl[q]).id};
                 }
 
                 // routes of solution representation
@@ -115,28 +127,58 @@ namespace vrp {
                                 get<0>(customers_lcl[c_num]).service_time;
                     }
                     get<3>(customers_lcl[c_num]) = 1;
+                    get<4>(customers_lcl[c_num])[0] = fi;
                 }
 
                 // at this moment we got all 0-point in all routes
 
                 // assign vehicles to routes
-                // TODO:add or not an update of cust and vehicle volumes inside?
-                int ri = 0;
+                unsigned int ri = 0;
                 unsigned int vi = 0;
                 while(ri < v_needed) {
+                    // id of the customer in route
                     size_t cus_num_id = routes[ri].second[0].first;
-                    if((vehicles_lcl[vi].second == false) &&
-                    (prob.customers[cus_num_id].demand.volume <
-                    vehicles_lcl[vi].first.capacity.volume)){
-                        routes[ri].first = vehicles_lcl[vi].first.id;
-                        vehicles_lcl[vi].second = true;
-                        ri++;
-                        vi = 0;
+                    // position in customers_lcl of the customer in route
+                    cus_num_pos = find_cust_number(pos_to_id, cus_num_id);
+                    if(get<2>(customers_local[cus_num_pos]) == false) {
+                        if((vehicles_lcl[vi].second == false) &&
+                            (prob.customers[cus_num_id].demand.volume<
+                                    vehicles_lcl[vi].first.capacity.volume))
+                        {
+                            routes[ri].first = vehicles_lcl[vi].first.id;
+                            vehicles_lcl[vi].second = true;
+                            // update available veh capacity
+                            vehicles_lcl[vi].first.capacity.volume -=
+                                prob.customers[cus_num_id].demand.volume;
+                            ri++;
+                            vi = 0;
+                        }
+                        else {
+                            vi++;
+                        }
                     }
                     else {
-                        vi++;
+                        if(vehicles_lcl[vi].second == false) {
+                            routes[ri].first = vehicles_lcl[vi].first.id;
+                            vehicles_lcl[vi].second = true;
+                            // update left cust demand
+                            get<0>(customers_local[cus_num_pos]).demand.volume -=
+                                    0.75*vehicles_lcl[vi].first.capacity.volume;
+                            // update available veh capacity
+                            vehicles_lcl[vi].first.capacity.volume *= 0.25;
+                            ri++;
+                            vi = 0;
+                        }
+                        else {
+                            vi++;
+                        }
                     }
                 }
+
+                // at this moment we got all routes assigned with vehicles
+
+                // building routes
+
 
                 if (check) {return true;}
                 else {return false;}
@@ -145,7 +187,7 @@ namespace vrp {
         } // namespace
 
 
-
+        /// a main part
         std::vector<Solution> parallel_insertion(const Problem& prob,
                                                     size_t count) {
 
@@ -184,6 +226,11 @@ namespace vrp {
             // set depo as visited
             get<3>(customers_local[0]) = 1;
 
+            std::vector<std::tuple<Customer, size_t, bool,
+                    size_t,
+                    std::vector<int>(max_splits, -1)
+                            > > customers_local_copy(points);
+
             // vehicles local representation
             /// first -Vehicle, second -used
             std::vector<std::pair<Vehicle,
@@ -192,6 +239,9 @@ namespace vrp {
                 vehicles_local[vn].first = prob.vehicles[vn];
                 vehicles_local[vn].second = false;
             }
+
+            std::vector<std::pair<Vehicle,
+                              bool> > vehicles_local_copy(prob.vehicles.size());
 
             //find the biggest vehicle
             auto biggest_veh_pointer = std::max_element(vehicles_local.begin(),
@@ -240,6 +290,9 @@ namespace vrp {
                           b.first.fixed_cost/b.first.capacity.volume);
                       });
 
+            customers_local_copy = customers_local;
+            vehicles_local_copy = vehicles_local;
+
             // sum all customers demands size
             size_t demand_sum = 0;
             for(i = 1; i < points; i++) {
@@ -259,6 +312,8 @@ namespace vrp {
                     customers_local, the_first_customer)) {
                 // if not - increment an amount of used vehicles
                 needed_veh++;
+                customers_local = customers_local_copy;
+                vehicles_local = vehicles_local_copy;
                 find_the_solution(prob, needed_veh, vehicles_local,
                                   customers_local, the_first_customer);
             }
