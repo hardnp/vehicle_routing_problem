@@ -71,3 +71,9 @@ if (${WITH_TBB})  # add TBB dependency
 else()  # fallback to implementation stub
     target_compile_definitions(${PROJECT_NAME} PRIVATE USE_TBB=0)
 endif()
+
+# add directory with tools (e.g. visualizer)
+option(WITH_TOOLS "Enable tools subdirectory" OFF)
+if (${WITH_TOOLS})
+    add_subdirectory(tools)
+endif()
