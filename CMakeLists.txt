@@ -54,6 +54,7 @@ endif()
 
 # add directory with library
 add_subdirectory(lib)
+add_subdirectory(tools)
 
 # create binary executable
 add_executable(${PROJECT_NAME} main.cpp)
