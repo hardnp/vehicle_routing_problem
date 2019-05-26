@@ -54,7 +54,6 @@ endif()
 
 # add directory with library
 add_subdirectory(lib)
-add_subdirectory(tools)
 
 # create binary executable
 add_executable(${PROJECT_NAME} main.cpp)
@@ -71,4 +70,10 @@ if (${WITH_TBB})  # add TBB dependency
     endif()
 else()  # fallback to implementation stub
     target_compile_definitions(${PROJECT_NAME} PRIVATE USE_TBB=0)
+endif()
+
+# add directory with tools (e.g. visualizer)
+option(WITH_TOOLS "Enable tools subdirectory" OFF)
+if (${WITH_TOOLS})
+    add_subdirectory(tools)
 endif()
