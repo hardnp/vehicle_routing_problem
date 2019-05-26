@@ -1,0 +1,7 @@
+PROJECT(vrptw_drawer)
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(SOURCE solution_drawer.cpp)
+set(CMAKE_CXX_FLAGS "-O2 -march=native -std=c++14")
+ADD_EXECUTABLE(${PROJECT_NAME} ${SOURCE})
+target_link_libraries(${PROJECT_NAME} sfml-graphics sfml-window sfml-system)

@@ -28,6 +28,13 @@ namespace utility {
 namespace vrp {
     namespace detail {
 
+        const double get_next_departure_time
+        (Customer const& to, Customer const& from, double previous_departure, std::vector<std::vector<double>> const& costs) {
+            const auto to_reach = previous_departure + costs[from.id][to.id];
+            const auto time_start = std::max(static_cast<double>(to.soft_tw.first), to_reach);
+            return time_start + to.service_time;
+        };
+
         std::vector<Solution> mole_jameson(const Problem& prob, size_t count) {
 
             using namespace utility;
@@ -60,13 +67,13 @@ namespace vrp {
 
                 auto update(Solution::RouteType const& route, Solution::RouteType::const_iterator iterator) -> void {
                     auto iter = iterator, prev = std::prev(iter);
-                    statuses[*iter].is_routed = 1;
+                    statuses[*iter].is_routed = true;
                     for (; *iter != 0 ;) {
                         auto& current_customer = customers[*iter];
                         auto& previous_customer = customers[*prev];
                         auto& current_status = statuses[current_customer.id];
                         auto& previous_status = statuses[previous_customer.id];
-                        current_status.departure_time = 1; /** TODO: ... */
+                        current_status.departure_time = get_next_departure_time(current_customer, previous_customer, previous_status.departure_time, costs);
                         current_status.current_load = previous_status.current_load + current_customer.demand;
                         prev = iter++;
                     }
@@ -84,24 +91,22 @@ namespace vrp {
             static constexpr auto LAMBDA = 1.1;
             static constexpr auto MU = 1.1;
 
+            /** @var Depot's ID. */
+            static constexpr auto DEPOT = 0;
+
             /** @note The badness (alpha) and goodness (beta) ratings for the insertion. */
             const auto alpha_evaluation = [&](size_t i, size_t k, size_t j) {
                 return prob.costs[i][k] + prob.costs[k][j] - LAMBDA * prob.costs[i][j];
             };
 
             const auto beta_evaluation = [&](size_t i, size_t k, size_t j) {
-                return MU * prob.costs[0][k] - alpha_evaluation(i, k, j);
-            };
-
-            const auto next_departure_time = []() {
-                auto departure = 0.0;
-                return departure;
+                return MU * prob.costs[DEPOT][k] - alpha_evaluation(i, k, j);
             };
 
             /** @note Check whether it's possible to insert the customer in the intermediate route. */
             auto get_insertion_feasiblity = [&]
                     (Solution::RouteType const& route, CustomerTracker const& tracker,
-                     Customer const& customer, Solution::RouteType::const_iterator position) {
+                     Customer const& customer, Solution::RouteType::const_iterator position, vrp::Vehicle const& vehicle) {
                 --position;
                 const auto* previous_customer = &prob.customers[*position];
                 const auto* current_customer = &customer;
@@ -110,9 +115,9 @@ namespace vrp {
 
                 for (;;) {
                     const auto required = departure_time + prob.costs[previous_customer->id][current_customer->id];
-                    if (required > current_customer->hard_tw.first) return false;
-                    departure_time = 0; /** TODO: Transfer the departure time calculation. */
-                    if (current_load += current_customer->demand > capacity) return false;
+                    if (required > current_customer->soft_tw.first) return false;
+                    departure_time = get_next_departure_time(*current_customer, *previous_customer, departure_time, prob.costs);
+                    if ((current_load += current_customer->demand) > vehicle.capacity.weight) return false;
                     if (++position == std::cend(route)) break;
                     previous_customer = current_customer;
                     current_customer = &prob.customers[*position];
@@ -147,14 +152,14 @@ namespace vrp {
               for (;;) {
                   InsertionCandidate best {};
                   for (auto const& current: prob.customers) {
-                      if (current.id == 0 || tracker.is_routed(current.id)) continue;
+                      if (current.id == DEPOT || tracker.is_routed(current.id)) continue;
                       InsertionCandidate candidate {};
                       for (auto pos = std::next(std::cbegin(constructed.second)); pos != std::cend(constructed.second); ++pos) {
                           const auto& next = prob.customers[*pos];
                           const auto& prev = prob.customers[*std::prev(pos)];
-                          if (!get_insertion_feasiblity(constructed.second, tracker, current, pos)) continue;
+                          if (!get_insertion_feasiblity(constructed.second, tracker, current, pos, prob.vehicles[iteration])) continue;
                           const auto badness = alpha_evaluation(prev.id, current.id, next.id);
-                          if (candidate.id == 0 || badness < candidate.badness) {
+                          if (candidate.id == DEPOT || badness < candidate.badness) {
                               candidate.id = current.id;
                               candidate.position = pos;
                               candidate.badness = badness;
